@@ -86,14 +86,23 @@ def register_callbacks_chargement(app):
     def show_dataset_preview(df_json):
         if df_json is None:
             return html.I("Aucun fichier chargé.")
-        
         df = pd.read_json(io.StringIO(df_json), orient='split')
         
+        # Générer les colonnes avec une ligne de type + nom de colonne
+        columns = [
+            {
+                "name": [str(dtype), col],
+                "id": col
+            }
+            for col, dtype in df.dtypes.items()
+        ]
+        # Créer le tableau avec entêtes multiples
         return html.Div([
             html.H6("🔎 Aperçu du dataset :"),
             dash_table.DataTable(
                 data=df.head(10).to_dict('records'),
-                columns=[{"name": i, "id": i} for i in df.columns],
+                columns=columns,
+                merge_duplicate_headers=False,  # fusionner les en-têtes identiques
                 style_table={"overflowX": "auto"},
                 style_cell={
                     "textAlign": "left",
