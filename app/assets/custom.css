@@ -1,0 +1,36 @@
+body {
+    background-color: #0b1c33 !important;
+    color: white;
+}
+.custom-nav {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 20px;
+}
+.custom-btn {
+    font-size: 16px;
+    padding: 10px 16px;
+    background-color: transparent;
+    border: 2px solid #ffffff44;
+    color: white;
+    border-radius: 6px;
+    transition: all 0.2s ease-in-out;
+}
+.custom-btn:hover {
+    background-color: #1e3c66;
+}
+.custom-btn.active {
+    border-color: #00C0F2;
+    font-weight: bold;
+}
+.custom-btn.validated {
+    color: #00cc66;
+    border-color: #00cc66;
+}
+.arrow {
+    font-size: 20px;
+    color: #ffffffaa;
+}
