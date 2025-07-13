@@ -18,4 +18,15 @@ Cette application a pour but de **visualiser, nettoyer et transformer** un jeu d
 ---
 
 ## 📁 Structure du projet (provisoire)
-
+junbidata/
+│
+├── app/
+│   ├── main.py                 # Interface principale, onglets, layout
+│   ├── modules/
+│   │   ├── __init__.py
+│   │   └── chargement.py       # Module de chargement (upload)
+├── assets/                     # Fichiers CSS personnalisés
+│   └── custom.css
+├── README.md
+├── requirements.txt
+└── run.py
