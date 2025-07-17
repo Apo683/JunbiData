@@ -39,8 +39,8 @@ def build_layout():
         dcc.Store(id="module-status", data={k: False for k in modules}),
         dcc.Store(id="show-upload", data=True),
         dcc.Store(id="module-cache", data={}),
-        dcc.Store(id="display-mode-store", data="graph_descending"),  # Store pour la valeur du dropdown
-        dcc.Store(id="refresh-state", data=False),  # Store pour synchronisation
+        dcc.Store(id="display-mode-store", data="graph_descending"),
+        dcc.Store(id="refresh-state", data=False),
 
         # Navigation
         html.Div(id="step-navigation", style={"marginBottom": "25px"}),
