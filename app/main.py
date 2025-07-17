@@ -2,7 +2,7 @@ import dash
 from dash import dcc, html, Input, Output, State, callback
 import dash_bootstrap_components as dbc
 
-# Imports des modules
+# Import des modules
 from app.modules.chargement import register_callbacks_chargement as register_chargement, get_content as get_chargement
 from app.modules.visualisation import register_callbacks_visualisation as register_visualisation, get_content as get_visualisation
 
@@ -32,20 +32,21 @@ def build_layout():
             html.Hr(style={"borderTop": "1px solid #888", "marginBottom": "25px"})
         ]),
 
-        # 📦 Stores partagés
+        # Stores partagés
         dcc.Store(id="df-store", data=None),
         dcc.Store(id="filename-store", data=None),
         dcc.Store(id="active-module", data="chargement"),
         dcc.Store(id="module-status", data={k: False for k in modules}),
         dcc.Store(id="show-upload", data=True),
-        dcc.Store(id="upload-refresh", data=0),
-        html.Button("Init", id="dummy-init", style={"display": "none"}),
+        dcc.Store(id="module-cache", data={}),
+        dcc.Store(id="display-mode-store", data="graph_descending"),  # Store pour la valeur du dropdown
+        dcc.Store(id="refresh-state", data=False),  # Store pour synchronisation
 
-        # 🔁 Navigation
+        # Navigation
         html.Div(id="step-navigation", style={"marginBottom": "25px"}),
         html.Hr(style={"borderTop": "1px solid #888", "marginBottom": "25px"}),
 
-        # 📂 Modules (visibles selon le contexte)
+        # Modules
         html.Div(id="content", children=[
             html.Div(id="module-chargement", children=get_chargement(), style={"display": "block"}),
             html.Div(id="module-visualisation", children=get_visualisation(), style={"display": "none"}),
@@ -63,16 +64,17 @@ app.layout = build_layout
     Input("active-module", "data")
 )
 def show_active_module(active_module):
+    print(f"DEBUG - show_active_module: active_module={active_module}")
     return [{"display": "block"} if k == active_module else {"display": "none"} for k in modules]
 
-# 🧭 Navigation principale
+# 🔄 Navigation principale
 @callback(
     Output("step-navigation", "children"),
-    Input("active-module", "data"),
-    Input("dummy-init", "n_clicks"),
-    Input("module-status", "data")
+    [Input("active-module", "data"),
+     Input("module-status", "data")]
 )
-def update_navigation(active_key, _, status):
+def update_navigation(active_key, status):
+    print(f"DEBUG - update_navigation: active_key={active_key}, status={status}")
     nav = []
     for i, (key, label) in enumerate(modules.items()):
         validated = status.get(key, False)
@@ -86,31 +88,47 @@ def update_navigation(active_key, _, status):
     return html.Div(nav, style={"display": "flex", "justifyContent": "center", "alignItems": "center", "flexWrap": "wrap"})
 
 @callback(
-    Output("module-chargement", "children"),
-    Input("show-upload", "data"),
-    Input("upload-refresh", "data"),
-    State("df-store", "data"),
-    State("filename-store", "data")
+    [Output("module-chargement", "children"),
+     Output("module-cache", "data")],
+    [Input("show-upload", "data"),
+     Input("df-store", "data"),
+     Input("filename-store", "data")],
+    [State("module-cache", "data"),
+     State("module-status", "data")]
 )
-def update_chargement_module(show_upload, _, df_json, filename):
-    return get_chargement(show_upload=show_upload, df_json=df_json, filename=filename)
+def update_chargement_module(show_upload, df_json, filename, module_cache, module_status):
+    print(f"DEBUG - update_chargement_module: show_upload={show_upload}, df_json={df_json is not None}")
+    cache = module_cache.copy()
+    validated = module_status.get("chargement", False)
 
-# 🔀 Changement de module actif
+    if validated and "chargement" in cache:
+        return cache["chargement"], cache
+
+    content = get_chargement(show_upload=show_upload, df_json=df_json, filename=filename)
+    if validated:
+        cache["chargement"] = content
+    return content, cache
+
+# Mise à jour du module actif
 @callback(
     Output("active-module", "data"),
     [Input({"type": "main-btn", "index": key}, "n_clicks") for key in modules],
-    State("active-module", "data")
+    [State("active-module", "data"),
+     State("module-status", "data")]
 )
 def switch_module(*args):
-    current = args[-1]
-    clicks = args[:-1]
+    current = args[-2]
+    status = args[-1]
     ctx_id = dash.callback_context.triggered_id
+    print(f"DEBUG - switch_module: ctx_id={ctx_id}, current={current}, status={status}")
     if ctx_id:
         selected = ctx_id["index"]
-        if selected != current:
+        if selected != current and (selected == "chargement" or status["chargement"]):
             return selected
     raise dash.exceptions.PreventUpdate
 
-# 🧩 Enregistrement des callbacks propres à chaque module
+### Intégration des modules
+# Module chargement du dataset
 register_chargement(app)
+# Module visualisation des données du dataset
 register_visualisation(app)
