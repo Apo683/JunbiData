@@ -58,7 +58,7 @@ def build_layout():
 
 app.layout = build_layout
 
-# 🔁 Affichage dynamique des modules visibles
+# 🔄 Affichage dynamique des modules visibles
 @callback(
     [Output(f"module-{key}", "style") for key in modules],
     Input("active-module", "data")
