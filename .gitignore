@@ -19,6 +19,7 @@ __pycache__/
 
 brouillons/
 data/
+datasets/
 logs/
 .env
 venv/
