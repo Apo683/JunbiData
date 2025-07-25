@@ -3,7 +3,9 @@ from dash import html, dcc, Input, Output, State, dash_table
 import dash_bootstrap_components as dbc
 import base64
 import io
+import os
 import pandas as pd
+from pyspark.sql import SparkSession
 
 # Style du bouton upload
 UPLOAD_STYLE = {
@@ -51,7 +53,7 @@ def get_content(show_upload=True, df_json=None, filename=None):
         id="upload-csv",
         children=html.Div([
             html.Div("📁 Glissez-déposez un fichier CSV ici ou cliquez."),
-            html.Div("🔍 Détection auto du séparateur avec Pandas", style={"fontSize": "14px", "color": "#ccc", "marginTop": "8px"})
+            html.Div("🔍 Détection auto du séparateur", style={"fontSize": "14px", "color": "#ccc", "marginTop": "8px"})
         ]),
         style=UPLOAD_STYLE if show_upload else {"display": "none"},
         multiple=False
@@ -92,33 +94,90 @@ def register_callbacks_chargement(app):
         triggered = dash.callback_context.triggered_id
         status = current_status.copy()
         cache = module_cache.copy()
-        print(f"DEBUG - handle_upload_or_reset: triggered={triggered}, contents={contents is not None}, reset_clicks={reset_clicks}")
 
-        # --- Réinitialisation ---
         if triggered == "reset-upload" and reset_clicks and reset_clicks > 0:
+            if 'spark' in globals():
+                spark.stop()  # Ferme la session Spark si elle existe
             status["chargement"] = False
             cache.pop("chargement", None)
             return None, None, status, True, None, cache
-        
-        # --- Upload du fichier ---
+
         if triggered == "upload-csv" and contents:
             try:
                 content_type, content_string = contents.split(',')
                 decoded = base64.b64decode(content_string)
-                for encoding in ["utf-8", "utf-8-sig", "latin-1", "cp1252", "ISO-8859-15", "utf-16", "shift_jis", "gbk"]:
+                print(f"----- Taille du fichier brut len(decoded) : {len(decoded)} octets -----")
+                file_size = len(decoded) / (1024 * 1024)  # En Mo
+                print(f"----- Taille du fichier file_size : {file_size:.2f} Mo -----")
+
+                # Étape 1 : Charger les 5 premières lignes avec Pandas pour détecter le séparateur
+                for encoding in ["utf-8", "utf-8-sig", "latin-1", "cp1252"]:
                     try:
-                        df = pd.read_csv(io.StringIO(decoded.decode(encoding)), sep=None, engine='python')
+                        sample = io.StringIO(decoded.decode(encoding))
+                        first_five_lines = [next(sample) for _ in range(5)] if len(decoded) > 0 else [""]
+                        sample.seek(0)
+                        # Analyser manuellement le séparateur
+                        potential_separators = [',', ';', '\t']
+                        line = first_five_lines[0].strip()
+                        separator_counts = {sep: line.count(sep) for sep in potential_separators}
+                        separator = max(separator_counts.items(), key=lambda x: x[1])[0] if max(separator_counts.values()) > 0 else ','
+                        print(f"Échantillon des 5 premières lignes : {first_five_lines}")
+                        print(f"----- Séparateur détecté ----- : '{separator}'")
                         break
-                    except UnicodeDecodeError:
+                    except (UnicodeDecodeError, StopIteration):
                         continue
                 else:
-                    raise ValueError("Erreur d'encodage sur tous les formats testés.")
+                    raise ValueError("Erreur d'encodage pour détecter le séparateur.")
+
+                if file_size < 30:
+                    print("Fichier de petite taille, traitement avec Pandas.")
+                    # Étape 2a : Utiliser Pandas pour tout le fichier
+                    for encoding in ["utf-8", "utf-8-sig", "latin-1"]:
+                        try:
+                            df = pd.read_csv(io.StringIO(decoded.decode(encoding)), sep=separator, engine='python')
+                            break
+                        except UnicodeDecodeError:
+                            continue
+                    else:
+                        raise ValueError("Erreur d'encodage avec Pandas.")
+                    df_json = df.to_json(date_format='iso', orient='split')
+                else:
+                    print("Fichier de grande taille, traitement avec Spark.")
+                    # Étape 2b : Utiliser Spark avec le séparateur détecté
+                    # Créer une session Spark à la volée
+                    spark = SparkSession.builder.appName("JunbiData").master("local[*]").getOrCreate()
+                    # Sauvegarder temporairement dans un fichier local
+                    temp_file = "temp_upload.csv"
+                    with open(temp_file, 'wb') as f:
+                        f.write(decoded)
+                    try:
+                        for encoding in ["utf-8", "iso-8859-1", "us-ascii", "utf-16", "utf-16be", "utf-16le", "utf-32"]:
+                            try:
+                                df = spark.read.option("encoding", encoding).option("delimiter", separator).option("header", "true").option("inferSchema", "true").csv(temp_file)
+                                print(f"Spark a lu le fichier avec l'encodage {encoding} et le séparateur '{separator}'")
+                                df.write.parquet("data/large_dataset.parquet", mode="overwrite")
+                                print("Fichier sauvegardé en Parquet.")
+                                # df_sampled = df.limit(1000)  # Limiter à 1000 lignes pour éviter les problèmes de mémoire
+                                # pdf = df_sampled.toPandas()
+                                pdf = df.toPandas()
+                                df_json = pdf.to_json(date_format='iso', orient='split')
+                                print(f"----- Extrait JSON du DataFrame Spark : {df_json[:2]}... -----")
+                                print(f"Echantillon généré : {len(df_json)} lignes")
+                                break
+                            except Exception as e:
+                                print(f"Erreur avec encodage {encoding}: {str(e)}")
+                                continue
+                        else:
+                            raise ValueError("Aucun encodage valide trouvé avec Spark.")
+                    finally:
+                        if os.path.exists(temp_file):
+                            os.remove(temp_file)  # Nettoyage du fichier temporaire
 
                 status["chargement"] = True
-                df_json = df.to_json(date_format='iso', orient='split')
                 return df_json, filename, status, False, None, cache
-
             except Exception as e:
+                if 'spark' in globals():
+                    spark.stop()
                 status["chargement"] = False
                 return None, None, status, True, html.Div(f"❌ Erreur : {str(e)}"), cache
 

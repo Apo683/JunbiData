@@ -23,4 +23,5 @@ datasets/
 logs/
 .env
 venv/
+venv_wsl/
 .DS_Store

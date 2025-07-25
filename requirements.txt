@@ -1,10 +1,13 @@
 pandas
 streamlit
 scikit-learn
+dash
+dash-bootstrap-components
 plotly
 matplotlib
 seaborn
 openpyxl
 pyarrow
+pyspark
 sqlalchemy
 duckdb
