@@ -37,6 +37,7 @@ def build_layout():
         dcc.Store(id="filename-store", data=None),
         dcc.Store(id="active-module", data="chargement"),
         dcc.Store(id="module-status", data={k: False for k in modules}),
+        dcc.Store(id="error-store", data={}),
         dcc.Store(id="show-upload", data=True),
         dcc.Store(id="module-cache", data={}),
         dcc.Store(id="display-mode-store", data="graph_descending"),
@@ -64,7 +65,7 @@ app.layout = build_layout
     Input("active-module", "data")
 )
 def show_active_module(active_module):
-    print(f"DEBUG - show_active_module: active_module={active_module}")
+    # print(f"DEBUG - show_active_module: active_module={active_module}")
     return [{"display": "block"} if k == active_module else {"display": "none"} for k in modules]
 
 # 🔄 Navigation principale
@@ -74,7 +75,7 @@ def show_active_module(active_module):
      Input("module-status", "data")]
 )
 def update_navigation(active_key, status):
-    print(f"DEBUG - update_navigation: active_key={active_key}, status={status}")
+    # print(f"DEBUG - update_navigation: active_key={active_key}, status={status}")
     nav = []
     for i, (key, label) in enumerate(modules.items()):
         validated = status.get(key, False)
@@ -94,17 +95,18 @@ def update_navigation(active_key, status):
      Input("df-store", "data"),
      Input("filename-store", "data")],
     [State("module-cache", "data"),
-     State("module-status", "data")]
+     State("module-status", "data"),
+     State("error-store", "data")]
 )
-def update_chargement_module(show_upload, df_json, filename, module_cache, module_status):
-    print(f"DEBUG - update_chargement_module: show_upload={show_upload}, df_json={df_json is not None}")
+def update_chargement_module(show_upload, df_json, filename, module_cache, module_status, error_store):
+    # print(f"DEBUG - update_chargement_module: show_upload={show_upload}, df_json={df_json is not None}")
     cache = module_cache.copy()
     validated = module_status.get("chargement", False)
 
     if validated and "chargement" in cache:
         return cache["chargement"], cache
 
-    content = get_chargement(show_upload=show_upload, df_json=df_json, filename=filename)
+    content = get_chargement(show_upload=show_upload, df_json=df_json, filename=filename, error=error_store)
     if validated:
         cache["chargement"] = content
     return content, cache
@@ -120,7 +122,7 @@ def switch_module(*args):
     current = args[-2]
     status = args[-1]
     ctx_id = dash.callback_context.triggered_id
-    print(f"DEBUG - switch_module: ctx_id={ctx_id}, current={current}, status={status}")
+    # print(f"DEBUG - switch_module: ctx_id={ctx_id}, current={current}, status={status}")
     if ctx_id:
         selected = ctx_id["index"]
         if selected != current and (selected == "chargement" or status["chargement"]):
