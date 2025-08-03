@@ -1,6 +1,8 @@
 import dash
 from dash import dcc, html, Input, Output, State, callback
 import dash_bootstrap_components as dbc
+import dash_uploader as du
+import os
 
 # Import des modules
 from app.modules.chargement import register_callbacks_chargement as register_chargement, get_content as get_chargement
@@ -15,9 +17,18 @@ modules = {
     "historique": "Historique"
 }
 
-# 🚀 Initialisation de l’application
+# 🚀 Initialisation de l'application
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.FLATLY], suppress_callback_exceptions=True)
 server = app.server
+
+# Configuration pour les gros fichiers
+server.config['MAX_CONTENT_LENGTH'] = 500 * 1024 * 1024  # 500 Mo
+
+# Configuration de dash-uploader
+upload_folder = os.path.join(os.path.abspath(os.path.dirname(__file__)), "tmp")
+os.makedirs(upload_folder, exist_ok=True)
+du.configure_upload(app, upload_folder, use_upload_id=False)
+
 app.title = "JunbiData"
 
 # 🧱 Layout principal
@@ -88,6 +99,7 @@ def update_navigation(active_key, status):
             nav.append(html.Span("→", style={"fontSize": "20px", "margin": "0 8px"}))
     return html.Div(nav, style={"display": "flex", "justifyContent": "center", "alignItems": "center", "flexWrap": "wrap"})
 
+# 🔄 Mise à jour du contenu du module chargement
 @callback(
     [Output("module-chargement", "children"),
      Output("module-cache", "data")],
@@ -99,7 +111,15 @@ def update_navigation(active_key, status):
      State("error-store", "data")]
 )
 def update_chargement_module(show_upload, df_json, filename, module_cache, module_status, error_store):
-    # print(f"DEBUG - update_chargement_module: show_upload={show_upload}, df_json={df_json is not None}")
+    print(f"DEBUG - update_chargement_module: show_upload={show_upload}, df_json={df_json}, filename={filename}, module_status={module_status}")
+    # Validation des paramètres
+    if not isinstance(module_cache, dict):
+        module_cache = {}
+    if not isinstance(module_status, dict):
+        module_status = {"chargement": False}
+    if not isinstance(error_store, dict):
+        error_store = {}
+        
     cache = module_cache.copy()
     validated = module_status.get("chargement", False)
 
@@ -111,7 +131,7 @@ def update_chargement_module(show_upload, df_json, filename, module_cache, modul
         cache["chargement"] = content
     return content, cache
 
-# Mise à jour du module actif
+# 🔄 Mise à jour du module actif
 @callback(
     Output("active-module", "data"),
     [Input({"type": "main-btn", "index": key}, "n_clicks") for key in modules],
@@ -121,11 +141,14 @@ def update_chargement_module(show_upload, df_json, filename, module_cache, modul
 def switch_module(*args):
     current = args[-2]
     status = args[-1]
+    
+    if not isinstance(status, dict):
+        status = {"chargement": False}
+        
     ctx_id = dash.callback_context.triggered_id
-    # print(f"DEBUG - switch_module: ctx_id={ctx_id}, current={current}, status={status}")
     if ctx_id:
         selected = ctx_id["index"]
-        if selected != current and (selected == "chargement" or status["chargement"]):
+        if selected != current and (selected == "chargement" or status.get("chargement", False)):
             return selected
     raise dash.exceptions.PreventUpdate
 
