@@ -22,7 +22,7 @@ app = dash.Dash(__name__, external_stylesheets=[dbc.themes.FLATLY], suppress_cal
 server = app.server
 
 # Configuration pour les gros fichiers
-server.config['MAX_CONTENT_LENGTH'] = 500 * 1024 * 1024  # 500 Mo
+server.config['MAX_CONTENT_LENGTH'] = 1024 * 1024 * 1024  # 1 Go
 
 # Configuration de dash-uploader
 upload_folder = os.path.join(os.path.abspath(os.path.dirname(__file__)), "tmp")
@@ -44,7 +44,6 @@ def build_layout():
         ]),
 
         # Stores partagés
-        dcc.Store(id="df-store", data=None),
         dcc.Store(id="filename-store", data=None),
         dcc.Store(id="active-module", data="chargement"),
         dcc.Store(id="module-status", data={k: False for k in modules}),
@@ -53,6 +52,8 @@ def build_layout():
         dcc.Store(id="module-cache", data={}),
         dcc.Store(id="display-mode-store", data="graph_descending"),
         dcc.Store(id="refresh-state", data=False),
+        dcc.Store(id="parquet-path-store", data=None),
+        dcc.Store(id="df-json-store", data=None),
 
         # Navigation
         html.Div(id="step-navigation", style={"marginBottom": "25px"}),
@@ -76,7 +77,6 @@ app.layout = build_layout
     Input("active-module", "data")
 )
 def show_active_module(active_module):
-    # print(f"DEBUG - show_active_module: active_module={active_module}")
     return [{"display": "block"} if k == active_module else {"display": "none"} for k in modules]
 
 # 🔄 Navigation principale
@@ -86,7 +86,6 @@ def show_active_module(active_module):
      Input("module-status", "data")]
 )
 def update_navigation(active_key, status):
-    # print(f"DEBUG - update_navigation: active_key={active_key}, status={status}")
     nav = []
     for i, (key, label) in enumerate(modules.items()):
         validated = status.get(key, False)
@@ -102,17 +101,18 @@ def update_navigation(active_key, status):
 # 🔄 Mise à jour du contenu du module chargement
 @callback(
     [Output("module-chargement", "children"),
-     Output("module-cache", "data")],
+     Output("module-cache", "data"),
+     Output("df-json-store", "data")],  # Ajout de la mise à jour du store df_json
     [Input("show-upload", "data"),
-     Input("df-store", "data"),
-     Input("filename-store", "data")],
+     Input("parquet-path-store", "data"),
+     Input("filename-store", "data"),
+     Input("df-json-store", "data")],  # Ajout comme input pour détecter les changements
     [State("module-cache", "data"),
      State("module-status", "data"),
      State("error-store", "data")]
 )
-def update_chargement_module(show_upload, df_json, filename, module_cache, module_status, error_store):
-    print(f"DEBUG - update_chargement_module: show_upload={show_upload}, df_json={df_json}, filename={filename}, module_status={module_status}")
-    # Validation des paramètres
+def update_chargement_module(show_upload, parquet_path, filename, df_json, module_cache, module_status, error_store):
+    print(f"DEBUG - update_chargement_module: show_upload={show_upload}, parquet_path={parquet_path}, filename={filename}, df_json={df_json is not None if df_json else 'None'}, module_status={module_status}")
     if not isinstance(module_cache, dict):
         module_cache = {}
     if not isinstance(module_status, dict):
@@ -124,12 +124,12 @@ def update_chargement_module(show_upload, df_json, filename, module_cache, modul
     validated = module_status.get("chargement", False)
 
     if validated and "chargement" in cache:
-        return cache["chargement"], cache
+        return cache["chargement"], cache, df_json
 
-    content = get_chargement(show_upload=show_upload, df_json=df_json, filename=filename, error=error_store)
+    content = get_chargement(show_upload=show_upload, parquet_path=parquet_path, filename=filename, df_json=df_json, error=error_store)
     if validated:
         cache["chargement"] = content
-    return content, cache
+    return content, cache, df_json
 
 # 🔄 Mise à jour du module actif
 @callback(
