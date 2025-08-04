@@ -34,3 +34,24 @@ body {
     font-size: 20px;
     color: #ffffffaa;
 }
+.dash-uploader-label {
+    height: 90px !important;
+    width: 100% !important;
+    display: flex !important;
+    justify-content: center !important;
+    padding: 0 !important;
+    box-sizing: border-box !important;
+    line-height: 20px !important;
+    cursor: pointer !important;
+    margin: 0 !important;
+    vertical-align: middle !important;
+    z-index: 1 !important;
+    position: relative !important;
+    align-items: flex-start !important;
+    padding-top: 5px !important;
+}
+.dash-uploader-label .dz-message {
+    margin: 0 !important;
+    padding: 0 !important;
+    height: 100% !important;
+}
