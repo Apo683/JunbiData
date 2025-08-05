@@ -24,9 +24,21 @@ junbidata/
 │   ├── main.py                 # Interface principale, onglets, layout
 │   ├── modules/
 │   │   ├── __init__.py
-│   │   └── chargement.py       # Module de chargement (upload)
+│   │   ├── chargement.py       # Module de chargement (upload)
+│   │   └── visualisation.py    # Module de visualisation (taux de complétion, outliers, ...)
 ├── assets/                     # Fichiers CSS personnalisés
 │   └── custom.css
 ├── README.md
 ├── requirements.txt
 └── run.py
+
+## Librairies utilisées
+Dash
+Plotly
+Pandas
+
+### Pour les datasets > 30 Mo : Spark
+Utilisation de WSL ou Linux conseillé (pour windows hadoop 3.3.6 max pour winutils.exe dispo ici : https://github.com/cdarlint/winutils)
+Spark
+Pyspark
+Hadoop

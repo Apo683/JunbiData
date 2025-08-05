@@ -25,3 +25,5 @@ logs/
 venv/
 venv_wsl/
 .DS_Store
+tmp/
+generated_data/
