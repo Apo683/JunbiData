@@ -359,7 +359,7 @@ def register_callbacks_chargement(app):
                 error_dict.pop('chargement', None)
                 status_dict["chargement"] = True
                 print("Upload réussi - Dataset chargé")
-                return [parquet_path, os.path.basename(corrected_filename), status_dict, False, error_dict, df_json_str, cache]  # Correction ici: passer parquet_path au lieu de df_json_str
+                return [parquet_path, os.path.basename(corrected_filename), status_dict, False, error_dict, df_json_str, cache]
                 
             except Exception as e:
                 print(f"Erreur lors du traitement : {str(e)}")
