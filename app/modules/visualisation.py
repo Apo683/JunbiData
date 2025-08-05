@@ -25,12 +25,12 @@ def get_content():
         # Stores pour persister les modes d'affichage
         dcc.Store(id="display-mode-store-cols", data="graph_descending"),
         dcc.Store(id="display-mode-store-rows", data="graph_descending"),
+        dcc.Store(id="selected-columns-store", data=[]),  # Store pour colonnes sélectionnées
         
         html.H5("📊 Visualisons la qualité des données :", style={"marginBottom": "15px"}),
         dbc.Tabs(id="subtabs-visu", active_tab="completion", children=[
             dbc.Tab(label="Taux de remplissage", tab_id="completion", children=[
                 html.Div([
-                    # html.H6("Taux de remplissage moyen :"),
                     html.Div(id="completion-mean-container", style={"textAlign": "left", "marginBottom": "20px"})
                 ]),
                 html.Div([
@@ -54,7 +54,32 @@ def get_content():
                     html.Div(id="completion-rows-container", style={"marginBottom": "20px"})
                 ])
             ]),
-            dbc.Tab(label="Distribution", tab_id="distribution"),
+            dbc.Tab(label="Distribution", tab_id="distribution", children=[
+                html.Div([
+                    html.H6("Sélectionnez les colonnes pour afficher leur distribution :"),
+                    html.Div([
+                        dbc.Checklist(
+                            id="column-selection-checklist",
+                            options=[],  # Rempli dynamiquement
+                            value=[],
+                            inline=True,  # Disposition horizontale
+                            style={
+                                "display": "flex",
+                                "flexWrap": "wrap",
+                                "justifyContent": "flex-start"
+                            },
+                            labelStyle={
+                                "width": "230px",  # Largeur fixe pour alignement
+                                "textOverflow": "ellipsis",
+                                "overflow": "hidden",
+                                "whiteSpace": "nowrap",
+                                "display": "inline-block"
+                            }
+                        )
+                    ], style={"marginBottom": "20px"}),
+                    html.Div(id="distribution-container", style={"marginTop": "20px"})
+                ])
+            ]),
             dbc.Tab(label="Valeurs uniques", tab_id="uniques"),
             dbc.Tab(label="Doublons", tab_id="doublons"),
             dbc.Tab(label="Valeurs aberrantes", tab_id="outliers"),
@@ -63,8 +88,8 @@ def get_content():
     ])
 
 # 🎯 Fonction commune pour générer le layout des graphiques
-def _get_common_layout(title, xaxis_title, yaxis_title, height=400, width=None):
-    return {
+def _get_common_layout(title, xaxis_title, yaxis_title, height=400, width=None, is_distribution=False):
+    layout = {
         "title_x": 0.5,
         "margin": {"l": 30, "r": 30, "t": 50, "b": 100},
         "xaxis_tickangle": 30,
@@ -72,16 +97,20 @@ def _get_common_layout(title, xaxis_title, yaxis_title, height=400, width=None):
         "plot_bgcolor": "#f2f2f2",
         "paper_bgcolor": "#f2f2f2",
         "font_color": "#111",
-        "yaxis": {"range": [0, 100]},
+        "font_size": 12,  # Réduit pour limiter l'impact des étiquettes
+        "yaxis": {"range": [0, 100] if "Pourcentage" in yaxis_title else None},
         "xaxis_title": xaxis_title,
         "yaxis_title": yaxis_title,
         "title": title,
         "height": height,
         "width": width
     }
+    if is_distribution:
+        layout["xaxis_showticklabels"] = False
+    return layout
 
 # 🎯 Génération générique du contenu
-def _generate_content(df, display_mode, x_col, y_col, title, xaxis_title, yaxis_title, sort_key=None, color=None, color_scale="Blues", discrete_map=None, height=400, width=None, custom_layout=None):
+def _generate_content(df, display_mode, x_col, y_col, title, xaxis_title, yaxis_title, sort_key=None, color=None, color_scale="Bluered_r", discrete_map=None, height=400, width=None, custom_layout=None):
     if display_mode == "table":
         return dash_table.DataTable(
             data=df.to_dict("records"),
@@ -136,11 +165,7 @@ def _generate_rows_content(df, display_mode):
     })
     layout = _get_common_layout("Taux de remplissage par ligne", "Numéro de ligne", "Pourcentage de remplissage (%)", height=400)
     layout["xaxis_showticklabels"] = False
-    return _generate_content(
-        df_percent, display_mode, "Ligne", "% de remplissage", 
-        "Taux de remplissage par ligne", "Numéro de ligne", 
-        "Pourcentage de remplissage (%)", "% de remplissage", height=400, custom_layout=layout
-    )
+    return _generate_content(df_percent, display_mode, "Ligne", "% de remplissage", "Taux de remplissage par ligne", "Numéro de ligne", "Pourcentage de remplissage (%)", "% de remplissage", height=400, custom_layout=layout)
 
 def _generate_mean_content(df, display_mode):
     # Taux de remplissage moyen
@@ -151,8 +176,46 @@ def _generate_mean_content(df, display_mode):
     # Affichage textuel
     return html.Div([
         html.P(f"Taux de remplissage moyen : {mean_completion:.2f}%", style={"fontSize": "18px"})
-        # html.P(f"Taux de remplissage moyen : {mean_completion:.2f}%", style={"fontSize": "16px", "fontWeight": "bold"})
     ])
+
+def _generate_distribution_content(df, selected_columns, display_mode="graph_raw"):
+    if not selected_columns or df.empty:
+        return html.Div("Aucune colonne sélectionnée ou dataset vide.")
+    
+    graphs = []
+    for col in selected_columns:
+        if col in df.columns:
+            # Vérifier si la colonne est numérique
+            if pd.api.types.is_numeric_dtype(df[col]):
+                # Centrer les données (soustraire la moyenne)
+                centered_data = df[col] - df[col].mean()
+                df_plot = pd.DataFrame({col: centered_data})
+                fig = px.histogram(
+                    df_plot,
+                    x=col,
+                    title=f"Distribution centrée de {col}",
+                    nbins=30,
+                    height=300
+                )
+                fig.update_layout(_get_common_layout(f"Distribution centrée de {col}", col, "Compte", is_distribution=True))
+            else:
+                # Pour les colonnes non numériques, trier par fréquence décroissante
+                value_counts = df[col].value_counts().reset_index()
+                value_counts.columns = [col, "Compte"]
+                value_counts = value_counts.sort_values("Compte", ascending=False)
+                fig = px.bar(
+                    value_counts,
+                    x=col,
+                    y="Compte",
+                    title=f"Distribution de {col}",
+                    height=300
+                )
+                fig.update_layout(_get_common_layout(f"Distribution de {col}", col, "Compte", is_distribution=True))
+            # Conserver les valeurs complètes dans l'infobulle
+            fig.update_traces(hovertemplate=f"{col}: %{{x}}<br>Compte: %{{y}}")
+            graphs.append(dcc.Graph(figure=fig))
+    
+    return html.Div(graphs) if graphs else html.Div("Aucune distribution générée.")
 
 def register_callbacks_visualisation(app):
     # Callback principal pour la mise à jour du contenu
@@ -160,27 +223,32 @@ def register_callbacks_visualisation(app):
         [Output("completion-cols-container", "children"),
          Output("completion-rows-container", "children"),
          Output("completion-mean-container", "children"),
+         Output("distribution-container", "children"),
+         Output("column-selection-checklist", "options"),
          Output("module-cache", "data", allow_duplicate=True)],
         [Input("parquet-path-store", "data"),
          Input("active-module", "data"),
-         Input("refresh-state", "data")],
+         Input("refresh-state", "data"),
+         Input("column-selection-checklist", "value")],
         [State("module-cache", "data"),
          State("module-status", "data"),
          State("display-mode-store-cols", "data"),
-         State("display-mode-store-rows", "data")],
+         State("display-mode-store-rows", "data"),
+         State("selected-columns-store", "data")],
         prevent_initial_call='initial_duplicate'
     )
-    def update_completion_content(parquet_path, active_module, refresh, module_cache, module_status, display_mode_cols, display_mode_rows):
-        print(f"DEBUG - update_completion_content: active_module={active_module}, parquet_path={parquet_path is not None if parquet_path else 'None'}")
+    def update_content(parquet_path, active_module, refresh, selected_columns, module_cache, module_status, display_mode_cols, display_mode_rows, stored_selected_columns):
+        print(f"DEBUG - update_content: active_module={active_module}, parquet_path={parquet_path is not None if parquet_path else 'None'}, selected_columns={selected_columns}")
         
         cache = module_cache.copy() if module_cache else {}
         validated = module_status.get("visualisation", False) if module_status else False
         
         if active_module != "visualisation":
-            return html.I("⚠️ Module visualisation non actif."), html.I("⚠️ Module visualisation non actif."), html.I("⚠️ Module visualisation non actif."), cache
+            return (html.I("⚠️ Module visualisation non actif."),) * 4 + ([],) + (cache,)
         
         display_mode_cols = display_mode_cols if display_mode_cols else "graph_descending"
         display_mode_rows = display_mode_rows if display_mode_rows else "graph_descending"
+        selected_columns = selected_columns if selected_columns else stored_selected_columns
 
         cache_key_cols = f"visualisation_completion_cols_{display_mode_cols}"
         cache_key_rows = f"visualisation_completion_rows_{display_mode_rows}"
@@ -189,6 +257,8 @@ def register_callbacks_visualisation(app):
             content_cols = html.I("⚠️ Aucun dataset chargé.")
             content_rows = html.I("⚠️ Aucun dataset chargé.")
             content_mean = html.I("⚠️ Aucun dataset chargé.")
+            content_distribution = html.I("⚠️ Aucun dataset chargé.")
+            column_options = []
         else:
             # Lire depuis le fichier Parquet
             if "large_dataset_parquet" in parquet_path:
@@ -215,8 +285,10 @@ def register_callbacks_visualisation(app):
                     cache[cache_key_rows] = content_rows
             
             content_mean = _generate_mean_content(df, None)
+            content_distribution = _generate_distribution_content(df, selected_columns)
+            column_options = [{"label": col, "value": col, "title": col} for col in df.columns]
 
-        return content_cols, content_rows, content_mean, cache
+        return content_cols, content_rows, content_mean, content_distribution, column_options, cache
 
     # Callback pour gérer les changements des dropdowns
     @app.callback(

@@ -55,3 +55,20 @@ body {
     padding: 0 !important;
     height: 100% !important;
 }
+/* Forcer l'affichage des infobulles pour les labels de dbc.Checklist */
+.dbc-checklist .form-check-label:hover::after {
+    content: attr(title);
+    position: absolute;
+    background: #333;
+    color: #fff;
+    padding: 5px 10px;
+    border-radius: 3px;
+    z-index: 1000;
+    white-space: nowrap;
+    top: -30px;
+    left: 50%;
+    transform: translateX(-50%);
+}
+.dbc-checklist .form-check-label {
+    position: relative;
+}
