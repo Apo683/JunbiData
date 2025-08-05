@@ -4,40 +4,33 @@ import dash_bootstrap_components as dbc
 import pandas as pd
 import io
 import plotly.express as px
+from pyspark.sql import SparkSession
+
 STYLE_DROPDOWN = {
-                "width": "250px",
-                "backgroundColor": "#ffffff",
-                "color": "#000",
-                "borderRadius": "5px",
-                "marginBottom": "15px"
-            }
+    "width": "250px",
+    "backgroundColor": "#ffffff",
+    "color": "#000",
+    "borderRadius": "5px",
+    "marginBottom": "15px"
+}
 OPTIONS_DROPDOWN = [
-                    {"label": "Graphique (brut)", "value": "graph_raw"},
-                    {"label": "Graphique (tri croissant)", "value": "graph_ascending"},
-                    {"label": "Graphique (tri décroissant)", "value": "graph_descending"},
-                    {"label": "Tableau", "value": "table"}
-                ]
+    {"label": "Graphique (brut)", "value": "graph_raw"},
+    {"label": "Graphique (tri croissant)", "value": "graph_ascending"},
+    {"label": "Graphique (tri décroissant)", "value": "graph_descending"},
+    {"label": "Tableau", "value": "table"}
+]
+
 def get_content():
     return html.Div([
         # Stores pour persister les modes d'affichage
         dcc.Store(id="display-mode-store-cols", data="graph_descending"),
         dcc.Store(id="display-mode-store-rows", data="graph_descending"),
-        dcc.Store(id="display-mode-store-mean", data="graph"),
         
         html.H5("📊 Visualisons la qualité des données :", style={"marginBottom": "15px"}),
         dbc.Tabs(id="subtabs-visu", active_tab="completion", children=[
             dbc.Tab(label="Taux de remplissage", tab_id="completion", children=[
                 html.Div([
-                    html.H6("Taux de remplissage moyen (lignes vs colonnes) :"),
-                    dcc.Dropdown(
-                        id="completion-display-mode-mean",
-                        options=[
-                            {"label": "Graphique", "value": "graph"},
-                            {"label": "Tableau", "value": "table"}
-                        ],
-                        value="graph",
-                        style=STYLE_DROPDOWN
-                    ),
+                    # html.H6("Taux de remplissage moyen :"),
                     html.Div(id="completion-mean-container", style={"textAlign": "left", "marginBottom": "20px"})
                 ]),
                 html.Div([
@@ -130,7 +123,9 @@ def _generate_cols_content(df, display_mode):
         'Colonne': df.columns,
         '% de remplissage': completion_percent.values
     })
-    return _generate_content(df_percent, display_mode, "Colonne", "% de remplissage", "Taux de remplissage par colonne", "Colonnes", "Pourcentage de remplissage (%)", "% de remplissage")
+    layout = _get_common_layout("Taux de remplissage par colonne", "Colonnes", "Pourcentage de remplissage (%)", height=400)
+    layout["xaxis_showticklabels"] = False
+    return _generate_content(df_percent, display_mode, "Colonne", "% de remplissage", "Taux de remplissage par colonne", "Colonnes", "Pourcentage de remplissage (%)", "% de remplissage", height=400, custom_layout=layout)
 
 def _generate_rows_content(df, display_mode):
     nan_percent = df.isna().mean(axis=1) * 100
@@ -148,36 +143,16 @@ def _generate_rows_content(df, display_mode):
     )
 
 def _generate_mean_content(df, display_mode):
-    # Taux de remplissage moyen par colonne : pourcentage de lignes non-NA par colonne, puis moyenne
+    # Taux de remplissage moyen
     num_rows = len(df)
     completion_percent_cols = (df.notna().sum() / num_rows) * 100
-    mean_completion_cols = completion_percent_cols.mean()
+    mean_completion = completion_percent_cols.mean()
     
-    # Taux de remplissage moyen par ligne : pourcentage de colonnes non-NA par ligne, puis moyenne
-    num_cols = len(df.columns)
-    completion_percent_rows = (df.notna().sum(axis=1) / num_cols) * 100
-    mean_completion_rows = completion_percent_rows.mean()
-    
-    print(f"DEBUG - Moyenne des colonnes: {mean_completion_cols:.2f}%")
-    print(f"DEBUG - Moyenne des lignes: {mean_completion_rows:.2f}%")
-
-    df_mean = pd.DataFrame({
-        'Type': ['Colonnes', 'Lignes'],
-        '% de remplissage': [mean_completion_cols, mean_completion_rows]
-    })
-    
-    # Layout personnalisé pour afficher la légende différemment
-    layout = _get_common_layout("Comparaison des taux de remplissage", "Type de calcul", "Pourcentage de remplissage (%)", height=400, width=500)
-    layout["showlegend"] = True
-    layout["xaxis_tickangle"] = 0
-    return _generate_content(
-        df_mean, display_mode, "Type", "% de remplissage", 
-        "Comparaison des taux de remplissage", 
-        "Type de calcul", "Pourcentage de remplissage (%)", 
-        None, "Type", None, 
-        {"Colonnes": "#87cefa", "Lignes": "#4682b4"}, 
-        400, 500, custom_layout=layout
-    )
+    # Affichage textuel
+    return html.Div([
+        html.P(f"Taux de remplissage moyen : {mean_completion:.2f}%", style={"fontSize": "18px"})
+        # html.P(f"Taux de remplissage moyen : {mean_completion:.2f}%", style={"fontSize": "16px", "fontWeight": "bold"})
+    ])
 
 def register_callbacks_visualisation(app):
     # Callback principal pour la mise à jour du contenu
@@ -186,18 +161,17 @@ def register_callbacks_visualisation(app):
          Output("completion-rows-container", "children"),
          Output("completion-mean-container", "children"),
          Output("module-cache", "data", allow_duplicate=True)],
-        [Input("df-store", "data"),
+        [Input("parquet-path-store", "data"),
          Input("active-module", "data"),
          Input("refresh-state", "data")],
         [State("module-cache", "data"),
          State("module-status", "data"),
          State("display-mode-store-cols", "data"),
-         State("display-mode-store-rows", "data"),
-         State("display-mode-store-mean", "data")],
+         State("display-mode-store-rows", "data")],
         prevent_initial_call='initial_duplicate'
     )
-    def update_completion_content(df_json, active_module, refresh, module_cache, module_status, display_mode_cols, display_mode_rows, display_mode_mean):
-        print(f"DEBUG - update_completion_content: active_module={active_module}, df_json={df_json is not None if df_json else 'None'}")
+    def update_completion_content(parquet_path, active_module, refresh, module_cache, module_status, display_mode_cols, display_mode_rows):
+        print(f"DEBUG - update_completion_content: active_module={active_module}, parquet_path={parquet_path is not None if parquet_path else 'None'}")
         
         cache = module_cache.copy() if module_cache else {}
         validated = module_status.get("visualisation", False) if module_status else False
@@ -207,18 +181,25 @@ def register_callbacks_visualisation(app):
         
         display_mode_cols = display_mode_cols if display_mode_cols else "graph_descending"
         display_mode_rows = display_mode_rows if display_mode_rows else "graph_descending"
-        display_mode_mean = display_mode_mean if display_mode_mean else "graph"
 
         cache_key_cols = f"visualisation_completion_cols_{display_mode_cols}"
         cache_key_rows = f"visualisation_completion_rows_{display_mode_rows}"
-        cache_key_mean = f"visualisation_completion_mean_{display_mode_mean}"
 
-        if df_json is None:
+        if parquet_path is None:
             content_cols = html.I("⚠️ Aucun dataset chargé.")
             content_rows = html.I("⚠️ Aucun dataset chargé.")
             content_mean = html.I("⚠️ Aucun dataset chargé.")
         else:
-            df = pd.read_json(io.StringIO(df_json), orient="split")
+            # Lire depuis le fichier Parquet
+            if "large_dataset_parquet" in parquet_path:
+                spark = SparkSession.builder.appName("JunbiData").master("local[*]").getOrCreate()
+                try:
+                    df = spark.read.parquet(parquet_path).limit(1000).toPandas()  # Limite à 1000 lignes pour performance
+                finally:
+                    spark.stop()
+            else:  # small_dataset_parquet
+                df = pd.read_parquet(parquet_path)
+            
             if validated and cache_key_cols in cache:
                 content_cols = cache[cache_key_cols]
             else:
@@ -233,12 +214,7 @@ def register_callbacks_visualisation(app):
                 if validated:
                     cache[cache_key_rows] = content_rows
             
-            if validated and cache_key_mean in cache:
-                content_mean = cache[cache_key_mean]
-            else:
-                content_mean = _generate_mean_content(df, display_mode_mean)
-                if validated:
-                    cache[cache_key_mean] = content_mean
+            content_mean = _generate_mean_content(df, None)
 
         return content_cols, content_rows, content_mean, cache
 
@@ -248,65 +224,55 @@ def register_callbacks_visualisation(app):
         Output("display-mode-store-cols", "data", allow_duplicate=True),
         Output("module-cache", "data", allow_duplicate=True),
         Input("completion-display-mode-cols", "value"),
-        State("df-store", "data"),
-        State("active-module", "data"),
-        State("subtabs-visu", "active_tab"),
-        State("module-cache", "data"),
-        State("module-status", "data"),
+        [State("parquet-path-store", "data"),
+         State("active-module", "data"),
+         State("subtabs-visu", "active_tab"),
+         State("module-cache", "data"),
+         State("module-status", "data")],
         prevent_initial_call=True
     )
-    def update_cols_display_mode(display_mode, df_json, active_module, active_tab, module_cache, module_status):
+    def update_cols_display_mode(display_mode, parquet_path, active_module, active_tab, module_cache, module_status):
         print(f"DEBUG - update_cols_display_mode: display_mode={display_mode}")
-        return _update_display_mode_helper(display_mode, df_json, active_module, active_tab, module_cache, module_status, "cols")
+        return _update_display_mode_helper(display_mode, parquet_path, active_module, active_tab, module_cache, module_status, "cols")
 
     @app.callback(
         Output("completion-rows-container", "children", allow_duplicate=True),
         Output("display-mode-store-rows", "data", allow_duplicate=True),
         Output("module-cache", "data", allow_duplicate=True),
         Input("completion-display-mode-rows", "value"),
-        State("df-store", "data"),
-        State("active-module", "data"),
-        State("subtabs-visu", "active_tab"),
-        State("module-cache", "data"),
-        State("module-status", "data"),
+        [State("parquet-path-store", "data"),
+         State("active-module", "data"),
+         State("subtabs-visu", "active_tab"),
+         State("module-cache", "data"),
+         State("module-status", "data")],
         prevent_initial_call=True
     )
-    def update_rows_display_mode(display_mode, df_json, active_module, active_tab, module_cache, module_status):
+    def update_rows_display_mode(display_mode, parquet_path, active_module, active_tab, module_cache, module_status):
         print(f"DEBUG - update_rows_display_mode: display_mode={display_mode}")
-        return _update_display_mode_helper(display_mode, df_json, active_module, active_tab, module_cache, module_status, "rows")
+        return _update_display_mode_helper(display_mode, parquet_path, active_module, active_tab, module_cache, module_status, "rows")
 
-    @app.callback(
-        Output("completion-mean-container", "children", allow_duplicate=True),
-        Output("display-mode-store-mean", "data", allow_duplicate=True),
-        Output("module-cache", "data", allow_duplicate=True),
-        Input("completion-display-mode-mean", "value"),
-        State("df-store", "data"),
-        State("active-module", "data"),
-        State("subtabs-visu", "active_tab"),
-        State("module-cache", "data"),
-        State("module-status", "data"),
-        prevent_initial_call=True
-    )
-    def update_mean_display_mode(display_mode, df_json, active_module, active_tab, module_cache, module_status):
-        print(f"DEBUG - update_mean_display_mode: display_mode={display_mode}")
-        return _update_display_mode_helper(display_mode, df_json, active_module, active_tab, module_cache, module_status, "mean")
-
-def _update_display_mode_helper(display_mode, df_json, active_module, active_tab, module_cache, module_status, index):
+def _update_display_mode_helper(display_mode, parquet_path, active_module, active_tab, module_cache, module_status, index):
     cache = module_cache.copy() if module_cache else {}
     
-    if active_module != "visualisation" or active_tab != "completion" or df_json is None:
+    if active_module != "visualisation" or active_tab != "completion" or parquet_path is None:
         raise dash.exceptions.PreventUpdate
     
-    df = pd.read_json(io.StringIO(df_json), orient="split")
+    # Lire depuis le fichier Parquet
+    if "large_dataset_parquet" in parquet_path:
+        spark = SparkSession.builder.appName("JunbiData").master("local[*]").getOrCreate()
+        try:
+            df = spark.read.parquet(parquet_path).limit(1000).toPandas()  # Limite à 1000 lignes pour performance
+        finally:
+            spark.stop()
+    else:  # small_dataset_parquet
+        df = pd.read_parquet(parquet_path)
+    
     if index == "cols":
         content = _generate_cols_content(df, display_mode)
         cache_key = f"visualisation_completion_cols_{display_mode}"
     elif index == "rows":
         content = _generate_rows_content(df, display_mode)
         cache_key = f"visualisation_completion_rows_{display_mode}"
-    elif index == "mean":
-        content = _generate_mean_content(df, display_mode)
-        cache_key = f"visualisation_completion_mean_{display_mode}"
     else:
         raise dash.exceptions.PreventUpdate
     
