@@ -10,13 +10,14 @@ import uuid
 import pandas as pd
 from pyspark.sql import SparkSession
 from pyspark.sql.types import StructType, ArrayType
+from app.modules import spark_utils
 
 # Génération des résultats de l'upload
 def generate_upload_info(parquet_path, filename):
     print(f"generate_upload_info: Vérification de {parquet_path}")
     if parquet_path and os.path.exists(parquet_path):
         if "large_dataset_parquet" in parquet_path:
-            spark = SparkSession.builder.appName("JunbiData").master("local[*]").getOrCreate()
+            spark = spark_utils.get_spark_session()  # Utiliser la SparkSession globale
             try:
                 parquet_df = spark.read.parquet(parquet_path)
                 row_count = parquet_df.count()
@@ -26,8 +27,6 @@ def generate_upload_info(parquet_path, filename):
                 print(f"Erreur Spark: {e}")
                 row_count = 0
                 col_count = 0
-            finally:
-                spark.stop()
         elif "small_dataset_parquet" in parquet_path:
             try:
                 df = pd.read_parquet(parquet_path)
@@ -210,16 +209,19 @@ def register_callbacks_chargement(app):
                 return [None, None, status_dict, True, error_dict, None, cache]
 
             # Définir le chemin Parquet selon la taille
-            parquet_path = os.path.join("data", "large_dataset_parquet" if os.path.getsize(corrected_filename) / (1024 * 1024) >= 30 else "small_dataset_parquet")
+            file_size = os.path.getsize(corrected_filename) / (1024 * 1024)
+            is_large_dataset = file_size >= 30
+            parquet_path = os.path.join("data", "large_dataset_parquet" if is_large_dataset else "small_dataset_parquet")
             os.makedirs(os.path.dirname(parquet_path), exist_ok=True)
 
             # Le reste du code de traitement avec impressions détaillées
             try:
-                file_size = os.path.getsize(corrected_filename) / (1024 * 1024)
                 print(f"Taille du fichier: {file_size:.2f} Mo")
-
                 # Traitement des petits fichiers avec Pandas
-                if file_size < 30:
+                if not is_large_dataset:
+                    # Si un petit dataset est chargé après un gros, arrêter Spark
+                    if not is_large_dataset and spark_utils.is_spark_active():
+                        spark_utils.stop_spark_session()
                     # Traitement des fichiers JSON avec Pandas
                     if corrected_filename.lower().endswith('.json'):
                         print("Fichier JSON détecté (petit), traitement avec Pandas.")
@@ -296,7 +298,7 @@ def register_callbacks_chargement(app):
                 else:
                     # Traitement des gros fichiers avec Spark
                     print("Fichier volumineux détecté, traitement avec Spark.")
-                    spark = SparkSession.builder.appName("JunbiData").master("local[*]").getOrCreate()
+                    spark = spark_utils.get_spark_session()  # Initialiser ou récupérer la SparkSession globale
                     try:
                         # Traitement des fichiers JSON avec Spark
                         if corrected_filename.lower().endswith('.json'):
@@ -349,11 +351,9 @@ def register_callbacks_chargement(app):
                                 raise ValueError("Aucun encodage valide trouvé avec Spark.")
                         else:
                             raise ValueError("Type de fichier non pris en charge. Utilisez .csv ou .json")
-                    finally:
-                        spark.stop()
-                        if os.path.exists(corrected_filename):
-                            os.remove(corrected_filename)
-                            print(f"Fichier temporaire {corrected_filename} supprimé")
+                    except Exception as e:
+                        error_dict['chargement'] = f"Erreur Spark: {str(e)}"
+                        raise
 
                 # Succès : mise à jour des stores
                 error_dict.pop('chargement', None)
@@ -396,6 +396,9 @@ def register_callbacks_chargement(app):
         print(f"=== CALLBACK RESET - Clicks: {reset_clicks} ===")
         
         if reset_clicks and reset_clicks > 0:
+            # Arrêter la SparkSession si active
+            # spark_utils.stop_spark_session()
+            
             # Nettoyage des fichiers Parquet
             for file in ["large_dataset_parquet", "small_dataset_parquet"]:
                 full_path = os.path.join("data", file)
