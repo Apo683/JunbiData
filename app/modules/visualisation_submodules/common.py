@@ -43,7 +43,7 @@ def format_warning(msg: str):
 
 def _get_common_layout(title, xaxis_title, yaxis_title, height=400):
     return {
-        "title": {"text": title, "x": 0.02, "xanchor": "left"},
+        "title": {"text": title, "x": 0.5, "xanchor": "center"},
         "height": height,
         "margin": {"l": 50, "r": 20, "t": 60, "b": 30},
         "xaxis_title": xaxis_title,
@@ -52,22 +52,9 @@ def _get_common_layout(title, xaxis_title, yaxis_title, height=400):
     }
 
 def _generate_content(
-    df: pd.DataFrame,
-    display_mode: str,
-    x_col: str,
-    y_col: str,
-    title: str,
-    xaxis_title: str,
-    yaxis_title: str,
-    sort_key: Optional[str] = None,
-    color: Optional[str] = None,
-    color_scale: str = "Plotly3",
-    discrete_map: Optional[dict] = None,
-    height: int = 400,
-    custom_layout: Optional[dict] = None,
-    xaxis_hide_ticks: bool = True,
-    bargap: float = 0.4,
-    category_order: Optional[list] = None,
+    df, display_mode, x_col, y_col, title, xaxis_title, yaxis_title,
+    sort_key=None, height=400, custom_layout=None, bargap=0.25,
+    category_order=None, x_as_category=False
 ):
     # Cas table
     if display_mode == "table":
@@ -82,38 +69,39 @@ def _generate_content(
         return html.Div("Aucune donnée à afficher.")
 
     # Tri (si l'appelant le souhaite). Pour “respecter l’ordre déjà calculé”, passer display_mode="graph_raw".
-    key = sort_key or y_col
-    if display_mode == "graph_ascending":
-        df = df.sort_values(key, ascending=True)
-    elif display_mode == "graph_descending":
-        df = df.sort_values(key, ascending=False)
-    # graph_raw = ordre tel quel
+    data = df.copy()
+    # NE PAS trier si "graph_raw"
+    if display_mode == "graph_ascending" and sort_key:
+        data = data.sort_values(sort_key, ascending=True, kind="mergesort")
+    elif display_mode == "graph_descending" and sort_key:
+        data = data.sort_values(sort_key, ascending=False, kind="mergesort")
+
+    # si demandé: X catégoriel => cast string avant le plot
+    if x_as_category:
+        data[x_col] = data[x_col].astype(str)
 
     fig = px.bar(
-        df,
+        data,
         x=x_col,
         y=y_col,
         title=title,
-        labels={y_col: yaxis_title, x_col: xaxis_title},
-        color=(color if color else y_col),
-        color_continuous_scale=(color_scale if not discrete_map else None),
-        color_discrete_map=discrete_map,
         height=height,
+        color=y_col,
+        color_continuous_scale="Bluered_r",
     )
 
-    layout = custom_layout or _get_common_layout(title, xaxis_title, yaxis_title, height)
-    if xaxis_hide_ticks:
-        layout["xaxis_showticklabels"] = False
-    if bargap is not None:
-        layout["bargap"] = bargap
-        layout["bargroupgap"] = 0.05  # un petit espace intra-groupe
+    if custom_layout:
+        fig.update_layout(**custom_layout)
 
-    # Forcer l’ordre des catégories pour éviter toute réorganisation côté Plotly
+    # Pas de tickformat imposé sur Y ni sur la colorbar -> plus de ".00" visuel
+    fig.update_layout(bargap=bargap)
+
     if category_order is not None:
-        layout["xaxis"] = layout.get("xaxis", {})
-        layout["xaxis"]["categoryorder"] = "array"
-        layout["xaxis"]["categoryarray"] = category_order
+        fig.update_xaxes(type="category", categoryorder="array", categoryarray=[str(v) for v in category_order])
+    elif x_as_category:
+        fig.update_xaxes(type="category")
 
-    fig.update_layout(**layout)
-    fig.update_traces(marker_line_width=0, hovertemplate=f"{x_col}: %{{x}}<br>{y_col}: %{{y}}")
+    # Hover propre à 2 décimales
+    fig.update_traces(hovertemplate=f"{x_col}: %{{x}}<br>{y_col}: %{{y:.2f}}%")
+
     return dcc.Graph(figure=fig)

@@ -29,16 +29,16 @@ def get_layout(STYLE_DROPDOWN, OPTIONS_DROPDOWN):
         html.Div([
             html.Div(id="completion-mean-container", style={"textAlign": "left", "marginBottom": "20px"}),
 
-            html.H6("Taux de remplissage par colonne :"),
+            html.P("Taux de remplissage par colonne :", style={"fontSize": "18px"}),
             dcc.Dropdown(
                 id="completion-display-mode-cols",
                 options=OPTIONS_DROPDOWN,
                 value="graph_descending",
                 style=STYLE_DROPDOWN
             ),
-            html.Div(id="completion-cols-container", style={"marginBottom": "20px"}),
+            html.Div(id="completion-cols-container", style={"marginBottom": "30px"}),
 
-            html.H6("Taux de remplissage par ligne :"),
+            html.P("Taux de remplissage par ligne :", style={"fontSize": "18px"}),
             dcc.Dropdown(
                 id="completion-display-mode-rows",
                 options=OPTIONS_DROPDOWN,
@@ -55,7 +55,7 @@ def get_layout(STYLE_DROPDOWN, OPTIONS_DROPDOWN):
                     clearable=False,
                     style={"width": "180px", "display": "inline-grid", "backgroundColor": "#ffffff", "color": "#000", "borderRadius": "5px"}
                 ),
-            ], style={"marginBottom": "10px"}),
+            ], style={"marginBottom": "15px"}),
             html.Div(id="completion-rows-container", style={"marginBottom": "20px"})
         ])
     ])
@@ -81,22 +81,6 @@ def _format_mean(df, is_spark=False):
         else:
             mean_pct = float((df.notna().sum(axis=1) / df.shape[1] * 100).mean())
     return html.Div([html.P(f"Taux de remplissage moyen : {mean_pct:.2f}%", style={"fontSize": "18px"})])
-
-def _auto_bargap(n_bars: int) -> float:
-    if n_bars <= 0:
-        return 0.30
-    # piecewise simple et lisible
-    if n_bars >= 800:
-        return 0.48
-    if n_bars >= 400:
-        return 0.42
-    if n_bars >= 200:
-        return 0.36
-    if n_bars >= 100:
-        return 0.30
-    if n_bars >= 50:
-        return 0.22
-    return 0.15
 
 def _cols_content(spark_df, display_mode, is_spark=False):
     if spark_df is None:
@@ -136,6 +120,7 @@ def _cols_content(spark_df, display_mode, is_spark=False):
     )
 
 def _rows_content(spark_df, display_mode, current_page=0, page_size=1000, is_spark=False):
+    # Cas sans dataset
     if spark_df is None:
         empty = pd.DataFrame({"Ligne": [], "% de remplissage": []})
         layout = _get_common_layout("Taux de remplissage par ligne", "Numéro de ligne", "Pourcentage de remplissage (%)", height=400)
@@ -145,11 +130,12 @@ def _rows_content(spark_df, display_mode, current_page=0, page_size=1000, is_spa
             x_col="Ligne", y_col="% de remplissage",
             title="Taux de remplissage par ligne",
             xaxis_title="Numéro de ligne", yaxis_title="Pourcentage de remplissage (%)",
-            height=400, custom_layout=layout, bargap=0.30, category_order=[]
+            height=400, custom_layout=layout,
+            category_order=[], x_as_category=True
         )
         return component, [{"label": "Page 1/1", "value": 0}], 0
 
-    # 1) % par ligne + row_id
+    # 1) % par ligne + id stable
     if is_spark:
         n_cols = len(spark_df.columns)
         if n_cols == 0:
@@ -166,37 +152,59 @@ def _rows_content(spark_df, display_mode, current_page=0, page_size=1000, is_spa
         else:
             pdf_all = pd.DataFrame(index=spark_df.index).assign(
                 pct=(spark_df.notna().sum(axis=1) / spark_df.shape[1] * 100.0)
-            )
-            pdf_all = pdf_all.reset_index().rename(columns={"index": "row_id"})[["row_id", "pct"]]
+            ).reset_index().rename(columns={"index": "row_id"})[["row_id", "pct"]]
 
+    # 2) Tri global (hors pagination)
+    num_columns = spark_df.shape[1]
     total_rows = len(pdf_all)
-    total_pages = max(1, math.ceil((total_rows or 0) / page_size))
+    if num_columns == 0 or total_rows == 0:
+        completion_percent_all = pd.Series([0.0] * total_rows, index=spark_df.index)
+    else:
+        completion_percent_all = (spark_df.notna().sum(axis=1) / num_columns) * 100
 
-    # 2) Tri global (desc) une seule fois (stable)
-    ordered = pdf_all.sort_values("pct", ascending=False, kind="mergesort").reset_index(drop=True)
-    ordered["OrdreGlobal"] = np.arange(len(ordered), dtype=int)
+    # tri global (sans rien paginer ici)
+    if display_mode in ("graph_ascending", "table"):
+        ordered = completion_percent_all.sort_values(ascending=True, kind="mergesort")
+    elif display_mode == "graph_descending":
+        ordered = completion_percent_all.sort_values(ascending=False, kind="mergesort")
+    else:
+        ordered = completion_percent_all  # "graph_raw" => pas de tri ici
 
-    # 3) Pagination
-    current_page = int(min(max(current_page or 0, 0), total_pages - 1))
+    # on garde l'index d'origine pour afficher "la vraie ligne"
+    ordered_df = pd.DataFrame({
+        "row_id": ordered.index,
+        "% de remplissage": ordered.values
+    }).reset_index(drop=True)
+
+    # pagination
+    total_pages = max(1, math.ceil((len(ordered_df) or 0) / page_size))
+    current_page = min(max(int(current_page or 0), 0), total_pages - 1)
     start_idx = current_page * page_size
-    end_idx = min(start_idx + page_size, total_rows)
-    page_df = ordered.iloc[start_idx:end_idx].copy()
-    page_df["OrdrePage"] = np.arange(len(page_df), dtype=int)
+    end_idx = min(start_idx + page_size, len(ordered_df))
+    page_df = ordered_df.iloc[start_idx:end_idx].copy()
 
-    # 4) Data finale pour graphe
-    df_percent = page_df.rename(columns={"OrdrePage": "Ligne", "pct": "% de remplissage"})[
-        ["Ligne", "% de remplissage", "row_id", "OrdreGlobal"]
-    ]
+    # X catégoriel texte, comme dans l’ancienne version:
+    # "Ligne <row_id+1>" pour rester 1-based si tu le souhaites
+    page_df["Ligne"] = page_df["row_id"].map(lambda r: f"Ligne {int(r)+1}")
 
-    # 5) Layout + bargap auto
-    layout = _get_common_layout("Taux de remplissage par ligne", "Numéro de ligne", "Pourcentage de remplissage (%)", height=400)
+    # Y arrondi à 2 décimales dans les données
+    page_df["% de remplissage"] = page_df["% de remplissage"].round(2)
+
+    df_percent = page_df[["Ligne", "% de remplissage"]]
+    category_order = df_percent["Ligne"].tolist()
+
+    # 5) Layout + bargap
+    layout = _get_common_layout(
+        "Taux de remplissage par ligne",
+        "Numéro de ligne",
+        "Pourcentage de remplissage (%)",
+        height=400
+    )
     layout["xaxis_showticklabels"] = False
-    bargap = _auto_bargap(len(df_percent))
-    category_order = df_percent["Ligne"].tolist()  # x unique et ordonné
 
     component = _generate_content(
         df_percent,
-        display_mode="graph_raw",  # ne pas re-trier après pagination
+        display_mode="graph_raw",          # pas de tri interne
         x_col="Ligne",
         y_col="% de remplissage",
         title="Taux de remplissage par ligne",
@@ -204,11 +212,11 @@ def _rows_content(spark_df, display_mode, current_page=0, page_size=1000, is_spa
         yaxis_title="Pourcentage de remplissage (%)",
         height=400,
         custom_layout=layout,
-        bargap=bargap,
-        category_order=category_order
+        bargap=0.40,
+        category_order=category_order,     # ordre exact des X de la page
+        x_as_category=True                 # axe X catégoriel
     )
 
-    # 6) Dropdown de pages (mettre “Page X/Y” dans le dropdown)
     page_options = [{"label": f"Page {i+1}/{total_pages}", "value": i} for i in range(total_pages)]
     page_value = current_page
     return component, page_options, page_value
