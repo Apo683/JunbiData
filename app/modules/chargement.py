@@ -128,7 +128,7 @@ def get_content(show_upload=True, parquet_path=None, filename=None, df_json=None
     )
 
     # Bouton reset (visible uniquement si dataset chargé)
-    reset_button_style = {"display": "inline-block" if parquet_path else "none", "marginBottom": "15px"}
+    reset_button_style = {"display": "inline-block" if parquet_path else "none", "marginBottom": "5px"}
 
     return html.Div([
         html.H5("📂 Chargement du jeu de données :", style={"marginBottom": "15px"}),
