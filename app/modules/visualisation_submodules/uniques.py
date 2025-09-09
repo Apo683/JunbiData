@@ -39,16 +39,16 @@ def get_layout(STYLE_DROPDOWN, OPTIONS_DROPDOWN):
 def _unique_counts(df, is_spark=False):
     if is_spark:
         unique_counts = df.select([F.countDistinct(col(c)).alias(c) for c in df.columns]) \
-                          .toPandas().melt(var_name='Colonne', value_name='Nombre de valeurs uniques')
+                          .toPandas().melt(var_name='Colonne', value_name='Nb de valeurs uniques')
         total_rows = df.count()
     else:
         unique_counts = pd.DataFrame({
             'Colonne': df.columns,
-            'Nombre de valeurs uniques': [df[c].nunique(dropna=False) for c in df.columns]
+            'Nb de valeurs uniques': [df[c].nunique(dropna=False) for c in df.columns]
         })
         total_rows = len(df)
     unique_counts['% de valeurs uniques'] = (
-        (unique_counts['Nombre de valeurs uniques'] / max(1, total_rows)) * 100
+        (unique_counts['Nb de valeurs uniques'] / max(1, total_rows)) * 100
     ).round(2)
     return unique_counts, total_rows
 
@@ -78,14 +78,14 @@ def register_callbacks(app):
         counts, _ = _unique_counts(df, is_spark=is_spark)
 
         layout_n = _get_common_layout("Nombre de valeurs uniques par colonne",
-                                    "Colonne", "Nombre de valeurs uniques", height=400)
+                                    "Colonne", "Nb de valeurs uniques", height=400)
         layout_n["xaxis_showticklabels"] = False
         graph_n = _generate_content(
             counts, display_mode or "graph_descending",
-            "Colonne", "Nombre de valeurs uniques",
+            "Colonne", "Nb de valeurs uniques",
             "Nombre de valeurs uniques par colonne",
-            "Colonne", "Nombre de valeurs uniques",
-            sort_key="Nombre de valeurs uniques",
+            "Colonne", "Nb de valeurs uniques",
+            sort_key="Nb de valeurs uniques",
             height=400, custom_layout=layout_n
         )
 
@@ -102,10 +102,14 @@ def register_callbacks(app):
         )
 
         return html.Div([
-            html.Div(graph_n, style={"width": "100%", "maxWidth": "900px", "display": "inline-block",
-                                    "verticalAlign": "top", "marginRight": "20px"}),
-            html.Div(graph_p, style={"width": "100%", "maxWidth": "900px", "display": "inline-block",
-                                    "verticalAlign": "top"})
+            dbc.Row(
+                [
+                    dbc.Col(graph_n, xs=12, md=6),
+                    dbc.Col(graph_p, xs=12, md=6),
+                ],
+                className="g-2",
+                style={"width": "100%", "margin": 0}
+            )
         ])
 
     # Détails d’une colonne (top 50)
@@ -137,6 +141,6 @@ def register_callbacks(app):
                      height=380)
         fig.update_layout(**_get_common_layout(f"Détails des valeurs uniques — {selected_column}",
                                                selected_column, "Compte", height=380))
-        fig.update_layout(xaxis_showticklabels=False, bargap=0)
+        fig.update_layout(xaxis_showticklabels=False, bargap=0.25)
         fig.update_traces(marker_line_width=0, hovertemplate=f"{selected_column}: %{{x}}<br>Compte: %{{y}}")
         return dcc.Graph(figure=fig)
