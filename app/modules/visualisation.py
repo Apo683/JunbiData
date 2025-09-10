@@ -1,6 +1,7 @@
 # modules/visualisation.py
 # Manager global du module Visualisation: assemble le layout et enregistre les callbacks
-from dash import html, dcc
+import dash
+from dash import html, dcc, Input, Output, State, no_update
 import dash_bootstrap_components as dbc
 
 import plotly.io as pio
@@ -26,6 +27,7 @@ OPTIONS_DROPDOWN = [
     {"label": "Graphique (tri décroissant)", "value": "graph_descending"},
     {"label": "Tableau", "value": "table"}
 ]
+MODULE_KEY = "visualisation"
 
 def _register_plotly_template():
     # Point de départ stable
@@ -75,3 +77,18 @@ def register_callbacks_visualisation(app):
     register_uniques(app)
     register_doublons(app)
     register_outliers(app)
+
+    # Validation du module dès qu'il est activé dans la nav principale
+    @app.callback(
+        Output("module-status", "data", allow_duplicate=True),
+        Input("active-module", "data"),
+        State("module-status", "data"),
+        prevent_initial_call=True,  # évite de tirer au 1er render
+    )
+    def _mark_visualisation_valid(active_module, status):
+        if active_module != MODULE_KEY:
+            raise dash.exceptions.PreventUpdate
+        status = status or {}
+        if status.get(MODULE_KEY) is True:
+            raise dash.exceptions.PreventUpdate
+        return {**status, MODULE_KEY: True}
