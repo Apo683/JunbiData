@@ -12,9 +12,10 @@ from app.modules.visualisation import register_callbacks_visualisation as regist
 modules = {
     "chargement": "Chargement",
     "visualisation": "Visualisation",
-    "modifications": "Modifications",
+    "nettoyage": "Nettoyage",
+    "preparation": "Préparation",
+    "historique": "Historique",
     "export": "Export",
-    "historique": "Historique"
 }
 
 # 🚀 Initialisation de l'application
@@ -35,7 +36,8 @@ app.title = "JunbiData"
 def build_layout():
     return dbc.Container([
         html.Div([
-            html.H1("JunbiData", style={"textAlign": "center", "marginTop": "40px", "marginBottom": "30px"}),
+            html.H1("JunbiData", style={"textAlign": "center", "marginTop": "40px"}),
+            html.H3("準備 Data", style={"fontWeight": "300", "textAlign": "center", "marginBottom": "20px"}),
             html.Div([
                 html.Span("🛠️", style={"fontSize": "20px", "marginRight": "10px"}),
                 html.Span("Préparez votre jeu de données", style={"fontSize": "24px"})
@@ -63,9 +65,10 @@ def build_layout():
         html.Div(id="content", children=[
             html.Div(id="module-chargement", children=get_chargement(), style={"display": "block"}),
             html.Div(id="module-visualisation", children=get_visualisation(), style={"display": "none"}),
-            html.Div(id="module-modifications", children=html.Div("🔧 Module Modifications"), style={"display": "none"}),
-            html.Div(id="module-export", children=html.Div("📦 Module Export"), style={"display": "none"}),
+            html.Div(id="module-nettoyage", children=html.Div("🧹 Module Nettoyage"), style={"display": "none"}),
+            html.Div(id="module-preparation", children=html.Div("🛠️ Module Préparation"), style={"display": "none"}),
             html.Div(id="module-historique", children=html.Div("📜 Module Historique"), style={"display": "none"}),
+            html.Div(id="module-export", children=html.Div("📦 Module Export"), style={"display": "none"}),
         ], style={"minHeight": "300px", "paddingBottom": "40px"})
     ], fluid=True)
 
