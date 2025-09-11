@@ -14,7 +14,9 @@ except Exception:
     col = None  # type: ignore
     HAS_SPARK = False
 
-from .common import load_df, _get_common_layout, format_warning
+from app.modules.common.io import load_df, format_warning
+from app.modules.common.viz import _get_common_layout
+from app.modules.common.ui import CHECKLIST_STYLE, CHECKLIST_INPUT_STYLE, CHECKLIST_LABEL_STYLE
 
 BARGAP = 0.30  # gap souhaité entre barres
 MAX_BARS_PANDAS = 2000  # si <=, on peut afficher toutes les modalités
@@ -33,16 +35,9 @@ def get_layout():
                         options=[],
                         value=[],  # aucune sélection par défaut
                         inline=True,
-                        style={"display": "flex", "flexWrap": "wrap", "justifyContent": "flex-start"},
-                        inputStyle={"marginRight": "6px"},
-                        labelStyle={
-                            "width": "230px",
-                            "textOverflow": "ellipsis",
-                            "overflow": "hidden",
-                            "whiteSpace": "nowrap",
-                            "display": "inline-block",
-                            "marginRight": "12px",
-                        },
+                        style=CHECKLIST_STYLE,
+                        inputStyle=CHECKLIST_INPUT_STYLE,
+                        labelStyle=CHECKLIST_LABEL_STYLE,
                     )
                 ], style={"marginBottom": "20px"}),
                 html.Div(id="distribution-container", style={"marginTop": "20px"}),

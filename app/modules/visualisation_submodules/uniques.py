@@ -14,7 +14,9 @@ except Exception:
     col = None  # type: ignore
     HAS_SPARK = False
 
-from .common import load_df, _get_common_layout, _generate_content, format_warning
+from app.modules.common.io import load_df, format_warning
+from app.modules.common.viz import _get_common_layout, _generate_content
+# from ..common.io import load_df, _get_common_layout, _generate_content, format_warning
 
 def get_layout(STYLE_DROPDOWN, OPTIONS_DROPDOWN):
     return dbc.Tab(tab_id="unique_values", label="Valeurs Uniques", children=[

@@ -7,26 +7,15 @@ import dash_bootstrap_components as dbc
 import plotly.io as pio
 import plotly.graph_objects as go
 
+from app.modules.common.ui import STYLE_DROPDOWN, OPTIONS_DROPDOWN
+
 # Sous-modules
 from .visualisation_submodules.completion import get_layout as completion_layout, register_callbacks as register_completion
 from .visualisation_submodules.distribution import get_layout as distribution_layout, register_callbacks as register_distribution
 from .visualisation_submodules.uniques import get_layout as uniques_layout, register_callbacks as register_uniques
-from .visualisation_submodules.doublons import (get_layout as duplicates_layout, register_callbacks as register_doublons)
+from .visualisation_submodules.duplicates import (get_layout as duplicates_layout, register_callbacks as register_doublons)
 from .visualisation_submodules.outliers import get_layout as outliers_layout, register_callbacks as register_outliers
 
-STYLE_DROPDOWN = {
-    "width": "250px",
-    "backgroundColor": "#ffffff",
-    "color": "#000",
-    "borderRadius": "5px",
-    "marginBottom": "15px"
-}
-OPTIONS_DROPDOWN = [
-    {"label": "Graphique (brut)", "value": "graph_raw"},
-    {"label": "Graphique (tri croissant)", "value": "graph_ascending"},
-    {"label": "Graphique (tri décroissant)", "value": "graph_descending"},
-    {"label": "Tableau", "value": "table"}
-]
 MODULE_KEY = "visualisation"
 
 def _register_plotly_template():

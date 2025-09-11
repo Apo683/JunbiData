@@ -19,7 +19,9 @@ except Exception:
     Window = None  # type: ignore
     HAS_SPARK = False
 
-from .common import load_df, _get_common_layout, _generate_content, format_warning
+from app.modules.common.io import load_df, format_warning
+from app.modules.common.ui import STYLE_DROPDOWN, OPTIONS_DROPDOWN
+from app.modules.common.viz import _get_common_layout, _generate_content
 
 # -------------------------
 # Layout
@@ -53,7 +55,7 @@ def get_layout(STYLE_DROPDOWN, OPTIONS_DROPDOWN):
                     options=[],
                     value=0,
                     clearable=False,
-                    style={"width": "180px", "display": "inline-grid", "backgroundColor": "#ffffff", "color": "#000", "borderRadius": "5px"}
+                    style={"width": "120px", "display": "inline-grid", "backgroundColor": "#ffffff", "color": "#000", "borderRadius": "5px"}
                 ),
             ], style={"marginBottom": "15px"}),
             html.Div(id="completion-rows-container", style={"marginBottom": "20px"})
