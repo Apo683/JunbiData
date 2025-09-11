@@ -7,6 +7,7 @@ import os
 # Import des modules
 from app.modules.chargement import register_callbacks_chargement as register_chargement, get_content as get_chargement
 from app.modules.visualisation import register_callbacks_visualisation as register_visualisation, get_content as get_visualisation
+from app.modules.cleaning import register_callbacks_cleaning as register_cleaning, get_content as get_cleaning
 
 # 🔧 Définition des modules
 modules = {
@@ -65,7 +66,8 @@ def build_layout():
         html.Div(id="content", children=[
             html.Div(id="module-chargement", children=get_chargement(), style={"display": "block"}),
             html.Div(id="module-visualisation", children=get_visualisation(), style={"display": "none"}),
-            html.Div(id="module-nettoyage", children=html.Div("🧹 Module Nettoyage"), style={"display": "none"}),
+            html.Div(id="module-nettoyage", children=get_cleaning(), style={"display": "none"}),
+            # html.Div(id="module-nettoyage", children=html.Div("🧹 Module Nettoyage"), style={"display": "none"}),
             html.Div(id="module-preparation", children=html.Div("🛠️ Module Préparation"), style={"display": "none"}),
             html.Div(id="module-historique", children=html.Div("📜 Module Historique"), style={"display": "none"}),
             html.Div(id="module-export", children=html.Div("📦 Module Export"), style={"display": "none"}),
@@ -160,3 +162,5 @@ def switch_module(*args):
 register_chargement(app)
 # Module visualisation des données du dataset
 register_visualisation(app)
+# Module nettoyage des données
+register_cleaning(app)
