@@ -1,4 +1,4 @@
-# app/modules/visualisation_parts/doublons.py
+# app/modules/visualisation_parts/duplicates.py
 import dash
 import dash_bootstrap_components as dbc
 from dash import html, dcc, Input, Output
@@ -14,7 +14,10 @@ except Exception:
     col = None  # type: ignore
     HAS_SPARK = False
 
-from .common import load_df, _get_common_layout, _generate_content, format_warning
+from app.modules.common.io import load_df, format_warning
+from app.modules.common.ui import STYLE_DROPDOWN, OPTIONS_DROPDOWN
+from app.modules.common.viz import _get_common_layout, _generate_content
+# from ..common.io import load_df, _get_common_layout, _generate_content, format_warning
 
 def get_layout(STYLE_DROPDOWN, OPTIONS_DROPDOWN):
     # OPTIONS_DROPDOWN: réutilise celles de uniques (graph_descending, graph_ascending, table, etc.)
