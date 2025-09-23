@@ -43,6 +43,16 @@ def load_df(parquet_path: Optional[str]):
     else:
         return pd.read_parquet(parquet_path), False
 
+def load_df_only(parquet_path: Optional[str]):
+    if not parquet_path:
+        return None
+    res = load_df(parquet_path)
+    if res is None:
+        return None
+    if isinstance(res, tuple):
+        return res[0]
+    return res
+
 def format_warning(msg: str):
     return html.I(f"⚠️ {msg}")
 

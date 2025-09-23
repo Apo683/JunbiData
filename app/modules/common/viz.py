@@ -1,3 +1,4 @@
+# modules/common/viz.py
 import dash
 from dash import html, dcc, dash_table
 import plotly.express as px

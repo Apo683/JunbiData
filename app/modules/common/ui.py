@@ -1,3 +1,4 @@
+# modules/common/ui.py
 STYLE_DROPDOWN = {
     "width": "250px",
     "backgroundColor": "#ffffff",
