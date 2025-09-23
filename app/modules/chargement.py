@@ -144,6 +144,7 @@ def register_callbacks_chargement(app):
     # 1️⃣ CALLBACK UPLOAD - Traite uniquement les uploads avec dash-uploader
     @du.callback(
         output=[
+            Output("original-parquet-path-store", "data"),
             Output("parquet-path-store", "data"),
             Output("filename-store", "data"),
             Output("module-status", "data"),
@@ -197,7 +198,7 @@ def register_callbacks_chargement(app):
 
             if not filename:
                 error_dict['chargement'] = "Aucun fichier uploadé détecté."
-                return [None, None, status_dict, True, error_dict, None, cache]
+                return [None, None, None, status_dict, True, error_dict, None, cache]
 
             # Extraire le nom de fichier brut et construire le chemin correct
             base_filename = os.path.basename(filename)
@@ -206,7 +207,7 @@ def register_callbacks_chargement(app):
 
             if not os.path.exists(corrected_filename):
                 error_dict['chargement'] = f"Impossible de localiser le fichier uploadé: {corrected_filename}"
-                return [None, None, status_dict, True, error_dict, None, cache]
+                return [None, None, None, status_dict, True, error_dict, None, cache]
 
             # Définir le chemin Parquet selon la taille
             file_size = os.path.getsize(corrected_filename) / (1024 * 1024)
@@ -359,7 +360,8 @@ def register_callbacks_chargement(app):
                 error_dict.pop('chargement', None)
                 status_dict["chargement"] = True
                 print("Upload réussi - Dataset chargé")
-                return [parquet_path, os.path.basename(corrected_filename), status_dict, False, error_dict, df_json_str, cache]
+                original_parquet_path = parquet_path  # Stocker le chemin original
+                return [original_parquet_path, parquet_path, os.path.basename(corrected_filename), status_dict, False, error_dict, df_json_str, cache]
                 
             except Exception as e:
                 print(f"Erreur lors du traitement : {str(e)}")
@@ -368,7 +370,7 @@ def register_callbacks_chargement(app):
                 if os.path.exists(corrected_filename):
                     os.remove(corrected_filename)
                     print(f"Fichier temporaire {corrected_filename} supprimé en cas d'erreur")
-                return [None, None, status_dict, True, error_dict, None, cache]
+                return [None, None, None, status_dict, True, error_dict, None, cache]
             finally:
                 if os.path.exists(corrected_filename):
                     os.remove(corrected_filename)
@@ -378,7 +380,8 @@ def register_callbacks_chargement(app):
 
     # 2️⃣ CALLBACK RESET - Traite uniquement les resets
     @app.callback(
-        [Output("parquet-path-store", "data", allow_duplicate=True),
+        [Output("original-parquet-path-store", "data", allow_duplicate=True),
+         Output("parquet-path-store", "data", allow_duplicate=True),
          Output("filename-store", "data", allow_duplicate=True),
          Output("module-status", "data", allow_duplicate=True),
          Output("show-upload", "data", allow_duplicate=True),
@@ -389,10 +392,11 @@ def register_callbacks_chargement(app):
         [State("module-status", "data"),
          State("error-store", "data"),
          State("module-cache", "data"),
+         State("original-parquet-path-store", "data"),
          State("parquet-path-store", "data")],
         prevent_initial_call=True
     )
-    def handle_reset(reset_clicks, current_status, current_error, cache, parquet_path):
+    def handle_reset(reset_clicks, current_status, current_error, cache, parquet_path, active_parquet_path):
         print(f"=== CALLBACK RESET - Clicks: {reset_clicks} ===")
         
         if reset_clicks and reset_clicks > 0:
@@ -422,6 +426,6 @@ def register_callbacks_chargement(app):
             cache_reset = {}
             
             print("Reset effectué - Retour à l'état initial")
-            return [None, None, status, True, error, None, cache_reset]
+            return [None, None, None, status, True, error, None, cache_reset]
         
         raise dash.exceptions.PreventUpdate

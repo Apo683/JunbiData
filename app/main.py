@@ -56,6 +56,7 @@ def build_layout():
         dcc.Store(id="display-mode-store", data="graph_descending"),
         dcc.Store(id="refresh-state", data=False),
         dcc.Store(id="parquet-path-store", data=None),
+        dcc.Store(id="original-parquet-path-store", data=None),
         dcc.Store(id="df-json-store", data=None),
 
         # Navigation
