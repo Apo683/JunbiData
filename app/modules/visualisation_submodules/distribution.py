@@ -28,7 +28,7 @@ def get_layout():
         label="Distribution",
         children=[
             html.Div([
-                html.H6("Sélectionnez les colonnes pour afficher leur distribution :"),
+                html.H4("Sélectionnez les colonnes pour afficher leur distribution :"),
                 html.Div([
                     dcc.Checklist(
                         id="column-selection-checklist",
