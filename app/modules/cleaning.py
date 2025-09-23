@@ -7,6 +7,12 @@ from .cleaning_submodules import missing, duplicates_clean, outliers_clean, form
 
 from app.modules.common.ui import STYLE_DROPDOWN, OPTIONS_DROPDOWN
 
+# Sous-modules
+from app.modules.cleaning_submodules.missing import get_layout as missing_layout, register_callbacks as register_missing
+from app.modules.cleaning_submodules.duplicates_clean import get_layout as duplicates_clean_layout, register_callbacks as register_duplicates_clean
+from app.modules.cleaning_submodules.outliers_clean import get_layout as outliers_clean_layout, register_callbacks as register_outliers_clean
+from app.modules.cleaning_submodules.formats import get_layout as formats_layout, register_callbacks as register_formats
+
 def get_content():
     return dbc.Tab(tab_id="nettoyage", label="Nettoyage", children=[
         html.Div([
@@ -16,9 +22,9 @@ def get_content():
                 duplicates_clean.get_tab(),
                 outliers_clean.get_tab(),
                 formats.get_tab(),
-            ], className="mb-3"),
+            ], style={"marginBottom": "20px"}, className="mb-3"),
             # Conteneurs par sous-onglet
-            html.Div(id="cleaning-content"),
+            html.Div(id="cleaning-content", style={"marginTop": "20px"}),
         ])
     ])
 
@@ -30,17 +36,17 @@ def register_callbacks_cleaning(app):
     )
     def render_subtab(active):
         if active == "clean-missing":
-            return missing.get_layout()
+            return missing_layout()
         if active == "clean-duplicates":
-            return duplicates_clean.get_layout()
+            return duplicates_clean_layout()
         if active == "clean-outliers":
-            return outliers_clean.get_layout()
+            return outliers_clean_layout()
         if active == "clean-formats":
-            return formats.get_layout()
+            return formats_layout()
         return format_warning("Sous-onglet inconnu.")
 
     # Callbacks spécifiques de chaque sous-module
-    missing.register_callbacks(app)
-    duplicates_clean.register_callbacks(app)
-    outliers_clean.register_callbacks(app)
-    formats.register_callbacks(app)
+    register_missing(app)
+    register_duplicates_clean(app)
+    register_outliers_clean(app)
+    register_formats(app)
