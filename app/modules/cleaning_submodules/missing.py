@@ -5,10 +5,12 @@ from typing import Any, Dict, List, Tuple, Optional
 import os
 import shutil
 from pathlib import Path
-
+import time
+from datetime import datetime
 import pandas as pd
+
 import dash
-from dash import html, dcc, Input, Output, State, ALL, no_update
+from dash import html, dcc, Input, Output, State, ALL, MATCH, no_update
 from dash.exceptions import PreventUpdate
 
 # Compat ctx: Dash >=2.9 -> dash.ctx ; sinon fallback sur callback_context
@@ -62,8 +64,12 @@ def get_layout() -> html.Div:
                 dcc.Store(id="miss-na-counts-store", data={}),
                 # Store utilisé pour bloquer les réouvertures fantômes du modal
                 dcc.Store(id="miss-viz-ts-store", data=0, storage_type="memory"),
+                dcc.Store(id="miss-applied-store", data={}, storage_type="memory"),
+                dcc.Store(id="miss-apply-clicks-store", data={}, storage_type="memory"),
+                dcc.Store(id="miss-history-store", data={}, storage_type="session"),
 
-                html.P("Sélectionnez les colonnes à traiter :", style={"fontSize": "17px", "marginBottom": "8px"}),
+                html.P("Sélectionnez les colonnes à traiter :", style={"fontSize": "17px"}),
+                # html.P("Sélectionnez les colonnes à traiter :", style={"fontSize": "17px", "marginBottom": "8px"}),
                 dcc.Checklist(
                     id="miss-columns",
                     options=[],
@@ -74,7 +80,7 @@ def get_layout() -> html.Div:
                 ),
                 html.Hr(),
                 html.Div(id="miss-rows-container"),
-                html.Div(id="miss-feedback", className="mt-2"),
+                # html.Div(id="miss-feedback", className="mt-2"),
 
                 # Modal global pour l'aperçu Avant/Après
                 dbc.Modal(
@@ -173,78 +179,165 @@ def _infer_dtype_spark(df: SparkDF, colname: str) -> str:
         return "datetime"
     return "text"
 
-
 def _build_row(colname: str, dtype_label: str, na_count: int) -> html.Div:
     is_numeric = (dtype_label == "numeric")
-    return html.Div([
-        dbc.Row(
-            [
-                dbc.Col(
-                    html.Span(
-                        f"{colname} — {na_count} NA",
-                        style={
-                            "backgroundColor": "#ffffff",
-                            "color": "#000000",
-                            "height": "36px",
-                            "lineHeight": "36px",
-                            "padding": "0 8px",
-                            "borderRadius": "4px",
-                            "fontFamily": "monospace",
-                            "display": "inline-block",
-                            "boxSizing": "border-box",
-                        }
+    return html.Div(
+        [
+            dbc.Row(
+                [
+                    # Chip "Nom — NA"
+                    dbc.Col(
+                        html.Span(
+                            f"{colname} — {na_count} NA",
+                            style={
+                                "backgroundColor": "#ffffff",
+                                "color": "#000000",
+                                "height": "32px",
+                                "lineHeight": "32px",
+                                "padding": "0 8px",
+                                "borderRadius": "4px",
+                                "fontFamily": "monospace",
+                                "display": "inline-block",
+                                "boxSizing": "border-box",
+                                "border": "1px solid #e5e7eb",
+                            },
+                        ),
+                        width="auto",
+                        className="me-2",
                     ),
-                    width="auto",
-                    className="me-1",
-                ),
-                dbc.Col(
-                    dcc.Dropdown(
-                        id={"type": "miss-strategy", "col": colname},
-                        options=_strategy_options_for_dtype(dtype_label),
-                        value="constant",
-                        placeholder="Choisir une stratégie…",
-                        style={**STYLE_DROPDOWN, "width": "220px", "marginBottom": "0px"},
-                        clearable=False,
+
+                    # Type entre le label et la stratégie
+                    dbc.Col(
+                        dbc.Badge(dtype_label, color="light", text_color="secondary", class_name="border"),
+                        width="auto",
+                        className="me-2",
                     ),
-                    width="auto",
-                    className="me-1",
-                ),
-                dbc.Col(
-                    dbc.Input(
-                        id={"type": "miss-const", "col": colname},
-                        placeholder="Valeur constante…",
-                        type="number" if is_numeric else "text",
-                        step="any" if is_numeric else None,
-                        style={"width": "200px", "marginBottom": "0px"},
+
+                    # Stratégie
+                    dbc.Col(
+                        dcc.Dropdown(
+                            id={"type": "miss-strategy", "col": colname},
+                            options=_strategy_options_for_dtype(dtype_label),
+                            value="drop_row",  # défaut robuste
+                            placeholder="Choisir une stratégie…",
+                            style={**STYLE_DROPDOWN, "width": "220px", "marginBottom": "0px"},
+                            clearable=False,
+                        ),
+                        width="auto",
+                        className="me-2",
                     ),
-                    id={"type": "miss-const-wrap", "col": colname},
-                    style={"display": "none"},
-                    width="auto",
-                ),
-                dbc.Col(
-                    dbc.Button(
-                        "Visualiser",
-                        id={"type": "miss-visualize", "col": colname},
-                        color="primary",
-                        outline=True,
+
+                    # Constante (cachée sauf stratégie=constant)
+                    dbc.Col(
+                        dbc.Input(
+                            id={"type": "miss-const", "col": colname},
+                            placeholder="Valeur constante…",
+                            type="number" if is_numeric else "text",
+                            step="any" if is_numeric else None,
+                            style={"width": "200px", "marginBottom": "0px"},
+                        ),
+                        id={"type": "miss-const-wrap", "col": colname},
+                        style={"display": "none"},
+                        width="auto",
+                        className="me-2",
                     ),
-                    width="auto",
-                    className="me-1",
-                ),
-                dbc.Col(
-                    dbc.Button(
-                        "Appliquer",
-                        id={"type": "miss-apply", "col": colname},
-                        color="primary",
+
+                    # Boutons
+                    dbc.Col(
+                        dbc.Button("Visualiser", id={"type": "miss-visualize", "col": colname},
+                                   color="secondary", size="sm", className="me-2"),
+                        width="auto",
                     ),
-                    width="auto",
-                ),
-            ],
-            className="align-items-center gy-1 gx-2",
-            justify="start",
-        ),
-        html.Hr(className="my-2"),
-    ], id={"type": "miss-row", "col": colname})
+                    dbc.Col(
+                        dbc.Button("Appliquer", id={"type": "miss-apply", "col": colname},
+                                   color="primary", size="sm"),
+                        width="auto",
+                    ),
+                ],
+                className="align-items-center gy-1 gx-2",
+                justify="start",
+            ),
+
+            # Feedback dédié à CETTE ligne (sous la ligne)
+            html.Div(id={"type": "miss-feedback", "col": colname}, className="mt-2"),
+
+            html.Hr(className="my-2"),
+        ],
+        id={"type": "miss-row", "col": colname},
+    )
+
+
+# def _build_row(colname: str, dtype_label: str, na_count: int) -> html.Div:
+#     is_numeric = (dtype_label == "numeric")
+#     return html.Div([
+#     dbc.Row(
+#         [
+#             dbc.Col(
+#                 html.Span(
+#                     f"{colname} — {na_count} NA",
+#                     style={
+#                         "backgroundColor": "#ffffff",
+#                         "color": "#000000",
+#                         "height": "36px",
+#                         "lineHeight": "36px",
+#                         "padding": "0 8px",
+#                         "borderRadius": "4px",
+#                         "fontFamily": "monospace",
+#                         "display": "inline-block",
+#                         "boxSizing": "border-box",
+#                     }
+#                 ),
+#                 width="auto",
+#                 className="me-1",
+#             ),
+#             dbc.Col(
+#                 dcc.Dropdown(
+#                     id={"type": "miss-strategy", "col": colname},
+#                     options=_strategy_options_for_dtype(dtype_label),
+#                     value="drop_row",
+#                     placeholder="Choisir une stratégie…",
+#                     style={**STYLE_DROPDOWN, "width": "220px", "marginBottom": "0px"},
+#                     clearable=False,
+#                 ),
+#                 width="auto",
+#                 className="me-1",
+#             ),
+#             dbc.Col(
+#                 dbc.Input(
+#                     id={"type": "miss-const", "col": colname},
+#                     placeholder="Valeur constante…",
+#                     type="number" if is_numeric else "text",
+#                     step="any" if is_numeric else None,
+#                     style={"width": "200px", "marginBottom": "0px"},
+#                 ),
+#                 id={"type": "miss-const-wrap", "col": colname},
+#                 style={"display": "none"},
+#                 width="auto",
+#             ),
+#             dbc.Col(
+#                 dbc.Button(
+#                     "Visualiser",
+#                     id={"type": "miss-visualize", "col": colname},
+#                     color="primary",
+#                     outline=True,
+#                 ),
+#                 width="auto",
+#                 className="me-1",
+#             ),
+#             dbc.Col(
+#                 dbc.Button(
+#                     "Appliquer",
+#                     id={"type": "miss-apply", "col": colname},
+#                     color="primary",
+#                 ),
+#                 width="auto",
+#             ),
+#         ],
+#         className="align-items-center gy-1 gx-2",
+#         justify="start",
+#     ),
+#     html.Hr(className="my-2"),
+# ], id={"type": "miss-row", "col": colname})
 
 def _to_number_or_raise(x) -> float | None:
     if x is None:
@@ -302,7 +395,7 @@ def _apply_pandas(df: pd.DataFrame, cols: List[str], strategies: Dict[str, Tuple
                 continue
 
             after = int(out[c].isna().sum())
-            report[c] = f"NA avant: {before}, après: {after}, stratégie: {strat}"
+            # report[c] = f"NA avant: {before}, après: {after}, stratégie: {strat}"
             new_na[c] = after
 
         except Exception as e:
@@ -338,8 +431,8 @@ def _apply_spark(df: SparkDF, cols: List[str], strategies: Dict[str, Tuple[str, 
                 report[c] = f"Stratégie '{strat}' inconnue, aucune modification."
 
             after = out.filter(F.col(c).isNull()).count()
-            if c not in report:
-                report[c] = f"NA avant: {before}, après: {after}, stratégie: {strat}"
+            # if c not in report:
+                # report[c] = f"NA avant: {before}, après: {after}, stratégie: {strat}"
             new_na[c] = after
         except Exception as e:
             report[c] = f"Erreur Spark: {e}"
@@ -562,65 +655,216 @@ def register_callbacks(app):
 
     # 4) Appliquer une stratégie sur la colonne cliquée
     @app.callback(
-        Output("miss-feedback", "children"),
+        Output("miss-applied-store", "data"),
         Output("miss-ui-store", "data"),
         Output("parquet-path-store", "data", allow_duplicate=True),
         Output("cleaned-parquet-path-store", "data"),
+        Output("miss-apply-clicks-store", "data"),
+        Output("miss-history-store", "data"),
         Input({"type": "miss-apply", "col": ALL}, "n_clicks"),
+        Input("miss-columns", "value"),
         State({"type": "miss-apply", "col": ALL}, "id"),
         State({"type": "miss-strategy", "col": ALL}, "id"),
         State({"type": "miss-strategy", "col": ALL}, "value"),
         State({"type": "miss-const", "col": ALL}, "id"),
         State({"type": "miss-const", "col": ALL}, "value"),
-        State("miss-columns", "value"),  # sélection courante
         State("parquet-path-store", "data"),
+        State("miss-applied-store", "data"),
+        State("miss-apply-clicks-store", "data"),
+        State("miss-history-store", "data"),
         prevent_initial_call=True,
     )
-    def _apply_missing_row(n_clicks_list, btn_ids, strat_ids, strat_vals, const_ids, const_vals,
-                           checklist_value, active_path):
-        # Pas de clic → rien
-        if not n_clicks_list or not any(n_clicks_list):
-            return no_update, no_update, no_update, no_update
-        if not active_path:
-            return dbc.Alert("Aucun parquet actif.", color="warning"), no_update, no_update, no_update
+    def apply_or_prune(nclicks_list, visible_cols, apply_ids, strat_ids, strat_vals, const_ids, const_vals,
+                    parquet_path, applied, clicks_store, history):
+        applied = applied or {}
+        clicks_store = clicks_store or {}
+        history = history or {}
 
-        # Quelle colonne a été cliquée ?
-        trig = getattr(dash, "ctx", ctx).triggered_id
+        def map_by_col(ids, vals):
+            out = {}
+            ids = ids or []
+            vals = vals or []
+            for i, _id in enumerate(ids):
+                if isinstance(_id, dict) and "col" in _id:
+                    out[_id["col"]] = vals[i] if i < len(vals) else None
+            return out
+
+        trig = ctx.triggered_id
+
+        # 1) Sélection modifiée → prune les états courants (on ne touche pas à l'historique)
+        if trig == "miss-columns":
+            visible = set(visible_cols or [])
+            pruned_applied = {c: v for c, v in applied.items() if c in visible}
+            pruned_clicks = {c: v for c, v in clicks_store.items() if c in visible}
+            strat_map = map_by_col(strat_ids, strat_vals)
+            const_map = map_by_col(const_ids, const_vals)
+            ui_state = {"selected": visible_cols or [], "strategies": strat_map, "constants": const_map}
+            return (
+                pruned_applied if pruned_applied != applied else no_update,  # miss-applied-store
+                ui_state,                                                   # miss-ui-store
+                no_update,                                                  # parquet-path-store
+                no_update,                                                  # cleaned-parquet-path-store
+                pruned_clicks if pruned_clicks != clicks_store else no_update,  # miss-apply-clicks-store
+                no_update,                                                  # miss-history-store (intact)
+            )
+
+        # 2) Pas un vrai clic "Appliquer" → no_update partout
         if not isinstance(trig, dict) or trig.get("type") != "miss-apply":
-            return no_update, no_update, no_update, no_update
-        col_clicked = trig.get("col")
+            return no_update, no_update, no_update, no_update, no_update, no_update
 
-        # Mappings stratégie / constante (pour toutes les colonnes visibles)
-        s_map = {i["col"]: v for i, v in zip(strat_ids or [], strat_vals or []) if isinstance(i, dict) and "col" in i}
-        c_map = {i["col"]: v for i, v in zip(const_ids or [], const_vals or []) if isinstance(i, dict) and "col" in i}
-        strategy = s_map.get(col_clicked, "drop_row")
-        const_value = c_map.get(col_clicked, None)
-
-        # État UI à persister
-        ui_state = {
-            "selected": checklist_value or [],
-            "strategies": s_map,
-            "constants": c_map,
-        }
-
-        # Charger le DF actif
-        df = load_df_only(active_path)
-        if df is None:
-            return dbc.Alert("Impossible de charger le dataset actif.", color="warning"), ui_state, no_update, no_update
-
-        # Appliquer
+        # 3) Détection de front (éviter les doubles traitements)
+        nclicks_list = nclicks_list or []
+        apply_ids = apply_ids or []
         try:
+            idx = next(i for i, _id in enumerate(apply_ids) if _id == trig)
+        except StopIteration:
+            return no_update, no_update, no_update, no_update, no_update, no_update
+
+        col = trig.get("col")
+        current = (nclicks_list[idx] or 0)
+        last = int(clicks_store.get(col, 0))
+        if current <= last:
+            return no_update, no_update, no_update, no_update, no_update, no_update
+
+        strat_map = map_by_col(strat_ids, strat_vals)
+        const_map = map_by_col(const_ids, const_vals)
+        strategy = strat_map.get(col, "drop_row")
+        const_val = const_map.get(col)
+        if strategy != "constant":
+            const_val = None
+
+        ui_state = {"selected": visible_cols or [], "strategies": strat_map, "constants": const_map}
+
+        # 4) Appliquer + journaliser NA avant/après
+        try:
+            df = load_df_only(parquet_path)
+            if df is None:
+                clicks_store[col] = current
+                return no_update, ui_state, no_update, no_update, clicks_store, no_update
+
+            ts = time.time()
+            engine = "pandas"
             if isinstance(df, pd.DataFrame):
-                df_new, report, new_na = _apply_pandas(df, [col_clicked], {col_clicked: (strategy, const_value)})
-                # Ici: si tu as une fonction de sauvegarde, appelle-la et mets à jour les stores de chemin.
-                # Par sécurité (pas de code de persistence fourni), on se contente de feedback.
-                msg = report.get(col_clicked, "Appliqué.")
-                return dbc.Alert(f"{col_clicked}: {msg}", color="success"), ui_state, no_update, no_update
+                before = int(df[col].isna().sum()) if col in df.columns else 0
+                df_new, report, new_na = _apply_pandas(df, [col], {col: (strategy, const_val)})
+                after = int(df_new[col].isna().sum()) if col in df_new.columns else new_na.get(col, 0)
             else:
                 if not HAS_SPARK:
-                    return dbc.Alert("Spark non disponible sur cet environnement.", color="warning"), ui_state, no_update, no_update
-                df_new, report, new_na = _apply_spark(df, [col_clicked], {col_clicked: (strategy, const_value)})
-                msg = report.get(col_clicked, "Appliqué (Spark).")
-                return dbc.Alert(f"{col_clicked}: {msg}", color="success"), ui_state, no_update, no_update
+                    clicks_store[col] = current
+                    return no_update, ui_state, no_update, no_update, clicks_store, no_update
+                engine = "spark"
+                before = df.filter(F.col(col).isNull()).count()
+                sdf_new, report, new_na = _apply_spark(df, [col], {col: (strategy, const_val)})
+                after = new_na.get(col, 0)
+
+            # Etat courant appliqué
+            applied[col] = {"strategy": strategy, "const": const_val, "ts": ts}
+
+            # Historique append-only
+            history.setdefault(col, [])
+            history[col].append({
+                "ts": ts,
+                "strategy": strategy,
+                "const": const_val,
+                "na_before": before,
+                "na_after": after,
+                "engine": engine,
+                "msg": report.get(col, "Appliqué."),
+            })
+
+            clicks_store[col] = current
+
+            # Écritures: on laisse parquet-path et cleaned-parquet intacts ici
+            return applied, ui_state, no_update, no_update, clicks_store, history
+
         except Exception as e:
-            return dbc.Alert(f"Erreur d'application sur {col_clicked}: {e}", color="danger"), ui_state, no_update, no_update
+            clicks_store[col] = current
+            ts = time.time()
+            history.setdefault(col, [])
+            history[col].append({
+                "ts": ts, "strategy": strategy, "const": const_val,
+                "na_before": None, "na_after": None, "engine": None,
+                "msg": f"Échec: {e}", "error": True,
+            })
+            return no_update, ui_state, no_update, no_update, clicks_store, history
+
+
+    def _format_entry(entry):
+        ts = entry.get("ts")
+        ts_txt = datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M:%S") if ts else ""
+        strat = entry.get("strategy")
+        const = entry.get("const")
+        before = entry.get("na_before")
+        after = entry.get("na_after")
+        is_err = entry.get("error", False)
+
+        strat_txt = f"{strat}" + (f" (const={const})" if strat == "constant" and const is not None else "")
+        details = []
+        if ts_txt:
+            details.append(ts_txt)
+        if strat_txt:
+            details.append(f"stratégie: {strat_txt}")
+        if before is not None and after is not None:
+            details.append(f"NA avant {before}, après {after}")
+
+        text = " — ".join(details) if details else (entry.get("msg") or "Appliqué")
+
+        return dbc.Alert(text, color=("danger" if is_err else "success"), class_name="mb-2 py-2 px-3")
+
+    @app.callback(
+        Output({"type": "miss-feedback", "col": MATCH}, "children"),
+        Input("miss-history-store", "data"),
+        State({"type": "miss-feedback", "col": MATCH}, "id"),
+        prevent_initial_call=False,
+    )
+    def render_row_feedback(history, this_id):
+        history = history or {}
+        col = (this_id or {}).get("col")
+        if not col:
+            raise PreventUpdate
+
+        entries = history.get(col, [])
+        if not entries:
+            return None
+
+        first_entry = min(entries, key=lambda e: e.get("ts", 0))
+        return _format_entry(first_entry)
+
+    @app.callback(
+        Output({"type": "miss-apply", "col": ALL}, "color"),
+        Input({"type": "miss-apply", "col": ALL}, "id"),
+        Input({"type": "miss-strategy", "col": ALL}, "id"),
+        Input({"type": "miss-strategy", "col": ALL}, "value"),
+        Input({"type": "miss-const", "col": ALL}, "id"),
+        Input({"type": "miss-const", "col": ALL}, "value"),
+        Input("miss-applied-store", "data"),
+        prevent_initial_call=False,  # on veut colorer dès le 1er rendu
+    )
+    def color_apply_buttons(apply_ids, strat_ids, strat_vals, const_ids, const_vals, applied):
+        applied = applied or {}
+
+        def map_by_col(ids, vals):
+            out = {}
+            for i, _id in enumerate(ids or []):
+                if isinstance(_id, dict) and "col" in _id:
+                    out[_id["col"]] = vals[i] if (vals and i < len(vals)) else None
+            return out
+
+        strat_map = map_by_col(strat_ids, strat_vals)
+        const_map = map_by_col(const_ids, const_vals)
+
+        colors = []
+        for _id in apply_ids or []:
+            col = _id.get("col") if isinstance(_id, dict) else None
+            cur_strategy = strat_map.get(col, "drop_row")
+            cur_const = const_map.get(col)
+            if cur_strategy != "constant":
+                cur_const = None
+            applied_state = applied.get(col, {})
+            ok = (
+                applied_state.get("strategy") == cur_strategy and
+                (applied_state.get("const") == cur_const)
+            )
+            colors.append("success" if ok else "primary")
+        return colors
+
