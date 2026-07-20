@@ -9,12 +9,6 @@ import plotly.graph_objects as go
 
 from app.modules.common.ui import STYLE_DROPDOWN, OPTIONS_DROPDOWN
 
-# Sous-modules
-from .visualisation_submodules.completion import get_layout as completion_layout, register_callbacks as register_completion
-from .visualisation_submodules.distribution import get_layout as distribution_layout, register_callbacks as register_distribution
-from .visualisation_submodules.uniques import get_layout as uniques_layout, register_callbacks as register_uniques
-from .visualisation_submodules.duplicates import (get_layout as duplicates_layout, register_callbacks as register_doublons)
-from .visualisation_submodules.outliers import get_layout as outliers_layout, register_callbacks as register_outliers
 
 MODULE_KEY = "visualisation"
 
@@ -42,6 +36,13 @@ _register_plotly_template()
 SAFE_TEMPLATE_NAME = "junbi"
 
 def get_content():
+    # Sous-modules
+    from .visualisation_submodules.completion import get_layout as completion_layout
+    from .visualisation_submodules.distribution import get_layout as distribution_layout
+    from .visualisation_submodules.uniques import get_layout as uniques_layout
+    from .visualisation_submodules.duplicates import get_layout as duplicates_layout
+    from .visualisation_submodules.outliers import get_layout as outliers_layout
+
     # Stores de contrôle propres au module
     return html.Div([
         dcc.Store(id="display-mode-store-cols", data="graph_descending"),
@@ -60,6 +61,13 @@ def get_content():
     ])
 
 def register_callbacks_visualisation(app):
+    # Sous-modules
+    from .visualisation_submodules.completion import register_callbacks as register_completion
+    from .visualisation_submodules.distribution import register_callbacks as register_distribution
+    from .visualisation_submodules.uniques import register_callbacks as register_uniques
+    from .visualisation_submodules.duplicates import register_callbacks as register_doublons
+    from .visualisation_submodules.outliers import register_callbacks as register_outliers
+
     # Enregistrement des callbacks de chaque sous-module
     register_completion(app)
     register_distribution(app)
