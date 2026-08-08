@@ -1,8 +1,9 @@
 backlog1.docx
 preprocess_data.docx
 commandes_useful.txt
+corrections à apporter.txt
 backlog_v1.xlsx
-
+test_spark.py
 
 __pycache__/
 *.pyc
