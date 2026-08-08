@@ -1,8 +1,9 @@
 import dash
-from dash import dcc, html, Input, Output, State, callback
+from dash import dcc, html, Input, Output, State, callback, Dash
 import dash_bootstrap_components as dbc
 import dash_uploader as du
 import os
+from pathlib import Path
 
 # Import des modules
 from app.modules.chargement import register_callbacks_chargement as register_chargement, get_content as get_chargement
@@ -20,7 +21,18 @@ modules = {
 }
 
 # 🚀 Initialisation de l'application
-app = dash.Dash(__name__, external_stylesheets=[dbc.themes.FLATLY], suppress_callback_exceptions=True)
+# app = dash.Dash(__name__, external_stylesheets=[dbc.themes.FLATLY], suppress_callback_exceptions=True)
+BASE_DIR = Path(__file__).resolve().parent
+
+app = Dash(
+    __name__,
+    external_stylesheets=[dbc.themes.FLATLY], suppress_callback_exceptions=True,
+    extra_hot_reload_paths=[
+        str(BASE_DIR),
+        str("main.py"),
+        str(BASE_DIR / "modules"),
+    ],
+)
 server = app.server
 
 # Configuration pour les gros fichiers
