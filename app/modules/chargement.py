@@ -8,9 +8,14 @@ import shutil
 import json
 import uuid
 import pandas as pd
+import traceback
+
 from pyspark.sql import SparkSession
 from pyspark.sql.types import StructType, ArrayType
 from app.modules import spark_utils
+from datetime import date, datetime
+
+from app.modules.common.io import prepare_preview_dataframe, prepare_adaptive_preview, truncate_preview_value
 
 # Génération des résultats de l'upload
 def generate_upload_info(parquet_path, filename):
@@ -46,24 +51,52 @@ def generate_upload_info(parquet_path, filename):
         html.P(f"🔢 Ce jeu de données contient {row_count} lignes et {col_count} colonnes")
     ])
 
-def show_dataset_preview(df_json):
+def show_dataset_preview(df_json, n_rows=10):
     if not df_json:
         return html.Div("⚠️ Aucun aperçu disponible.")
-    df = pd.read_json(io.StringIO(df_json), orient='split')
-    print(f"----- Aperçu du dataset avec {df.shape[0]} lignes et {df.shape[1]} colonnes -----")
-    columns = [{"name": [str(dtype), col], "id": col} for col, dtype in df.dtypes.items()]
-    return html.Div([
-        html.H6("🔎 Aperçu du dataset :", style={"marginBottom": "15px"}),
-        dash_table.DataTable(
-            data=df.head(10).to_dict('records'),
-            columns=columns,
-            merge_duplicate_headers=False,
-            style_table={"overflowX": "auto"},
-            style_cell={"textAlign": "left", "fontSize": "14px", "backgroundColor": "#f2f2f2", "color": "#111"},
-            style_header={"backgroundColor": "#e0e0e0", "fontWeight": "bold", "color": "#000"},
-            page_size=10
+
+    try:
+        df = pd.read_json(
+            io.StringIO(df_json),
+            orient="split"
         )
-    ])
+
+        display_df = df.head(n_rows)
+        records = display_df.to_dict("records")
+
+        columns = [
+            {
+                "name": [str(dtype), str(column)],
+                "id": str(column),
+                "type": "text"
+            }
+            for column, dtype in display_df.dtypes.items()
+        ]
+        
+        print("Nombre de lignes JSON :", len(df))
+        print("Nombre de lignes records :", len(records))
+        print("Nombre de lignes affichées :", len(display_df))
+        return html.Div([
+            html.H6("🔎 Aperçu du dataset :"),
+            dash_table.DataTable(
+                data=records,
+                columns=columns,
+                merge_duplicate_headers=False,
+                style_cell={"textAlign": "left", "fontSize": "14px", "backgroundColor": "#f2f2f2", "color": "#111"},
+                style_header={"backgroundColor": "#e0e0e0", "fontWeight": "bold", "color": "#000"},
+                page_action="none",
+                page_size=len(records) or 1,
+                style_table={"overflowX": "auto", "overflowY": "visible"},
+                virtualization=False
+            )
+        ])
+
+    except Exception as exc:
+        print(f"Erreur aperçu : {exc}")
+        return dbc.Alert(
+            "Aperçu indisponible.",
+            color="warning"
+        )
 
 # 🎯 Rendu dynamique du module chargement selon l'état d'upload
 def get_content(show_upload=True, parquet_path=None, filename=None, df_json=None, error=None):
@@ -217,15 +250,15 @@ def register_callbacks_chargement(app):
 
             # Le reste du code de traitement avec impressions détaillées
             try:
-                print(f"Taille du fichier: {file_size:.2f} Mo")
-                # Traitement des petits fichiers avec Pandas
+                print(f"----- Taille du fichier: {file_size:.2f} Mo -----")
+                ##### Traitement des petits fichiers avec Pandas #####
                 if not is_large_dataset:
                     # Si un petit dataset est chargé après un gros, arrêter Spark
                     if not is_large_dataset and spark_utils.is_spark_active():
                         spark_utils.stop_spark_session()
-                    # Traitement des fichiers JSON avec Pandas
+                    ##### Traitement des fichiers JSON avec Pandas #####
                     if corrected_filename.lower().endswith('.json'):
-                        print("Fichier JSON détecté (petit), traitement avec Pandas.")
+                        print("----- Fichier JSON détecté (petit), traitement avec Pandas. -----")
                         df = None
                         try:
                             with open(corrected_filename, 'r') as f:
@@ -242,27 +275,27 @@ def register_callbacks_chargement(app):
                             for orient in ["split", "records", "index", "columns", "values"]:
                                 try:
                                     df = pd.read_json(io.StringIO(df_json_str), orient=orient)
-                                    print(f"JSON lu avec orient={orient}")
+                                    print(f"----- JSON lu avec orient={orient} -----")
                                     break
                                 except (ValueError, Exception) as e:
-                                    print(f"Erreur avec orient={orient}: {str(e)}")
+                                    print(f"----- Erreur avec orient={orient}: {str(e)} -----")
                                     continue
                             if df is None:
                                 df = pd.DataFrame(json_data)
-                                print("Conversion en DataFrame réussie")
+                                print("----- Conversion en DataFrame réussie -----")
                             nested_cols = [col for col in df.columns if df[col].apply(lambda x: isinstance(x, (dict, list))).any()]
                             if nested_cols:
                                 df = pd.json_normalize(json_data)
-                                print("Normalisation JSON appliquée")
+                                print("----- Normalisation JSON appliquée -----")
                             df.to_parquet(parquet_path)
-                            df_json_str = df.head(10).to_json(orient="split")
+                            df_json_str = prepare_adaptive_preview(df)
                             print(f"df_json_str (extrait) généré: {df_json_str[:3]}...")
                         except (json.JSONDecodeError, ValueError, Exception) as e:
                             error_dict['chargement'] = f"Erreur JSON: {str(e)}"
                             raise
-                    # Traitement des fichiers CSV avec Pandas
+                    ##### Traitement des fichiers CSV avec Pandas #####
                     elif corrected_filename.lower().endswith('.csv'):
-                        print("Fichier CSV détecté (petit), traitement avec Pandas.")
+                        print("----- Fichier CSV détecté (petit), traitement avec Pandas. -----")
                         try:
                             for encoding in ["utf-8", "utf-8-sig", "latin-1", "cp1252"]:
                                 with open(corrected_filename, 'r', encoding=encoding) as f:
@@ -273,108 +306,144 @@ def register_callbacks_chargement(app):
                                 line = first_five_lines[0].strip()
                                 separator_counts = {sep: line.count(sep) for sep in potential_separators}
                                 separator = max(separator_counts.items(), key=lambda x: x[1])[0] if max(separator_counts.values()) > 0 else ','
-                                print(f"Séparateur détecté: {separator}")
+                                print(f"----- Séparateur détecté: {separator} -----")
                                 break
                             else:
                                 raise ValueError("Erreur d'encodage pour détecter le séparateur.")
-                            
+
                             for encoding in ["utf-8", "utf-8-sig", "latin-1"]:
                                 try:
                                     with open(corrected_filename, 'r', encoding=encoding) as f:
                                         df = pd.read_csv(io.StringIO(f.read()), sep=separator, engine='python')
-                                    print(f"CSV lu avec encodage={encoding}")
+                                    print(f"----- CSV lu avec encodage={encoding} -----")
                                     break
                                 except UnicodeDecodeError:
                                     continue
                             else:
                                 raise ValueError("Erreur d'encodage avec Pandas.")
                             df.to_parquet(parquet_path)
-                            df_json_str = df.head(10).to_json(orient="split")
-                            print(f"df_json_str (extrait) généré: {df_json_str[:3]}...")
+                            df_json_str = prepare_adaptive_preview(df)
+                            print(f"----- df_json_str (extrait) généré: {df_json_str[:3]}... -----")
                         except (ValueError, Exception) as e:
                             error_dict['chargement'] = f"Erreur CSV: {str(e)}"
                             raise
                     else:
                         raise ValueError("Type de fichier non pris en charge. Utilisez .csv ou .json.")
                 else:
-                    # Traitement des gros fichiers avec Spark
-                    print("Fichier volumineux détecté, traitement avec Spark.")
+                    ##### Traitement des gros fichiers avec Spark #####
+                    print("----- Fichier volumineux détecté, traitement avec Spark. -----")
                     spark = spark_utils.get_spark_session()  # Initialiser ou récupérer la SparkSession globale
                     try:
-                        # Traitement des fichiers JSON avec Spark
-                        if corrected_filename.lower().endswith('.json'):
-                            print("Traitement d'un gros fichier JSON avec Spark.")
-                            for encoding in ['utf-8', 'utf-16', 'latin-1']:
+                        ##### Traitement des fichiers JSON avec Spark #####
+                        if corrected_filename.lower().endswith(".json"):
+                            print("----- Traitement d'un gros fichier JSON avec Spark. -----")
+                            json_data = None
+                            last_error = None
+                            for encoding in ["utf-8", "utf-16", "latin-1", "cp1252"]:
                                 try:
-                                    with open(corrected_filename, 'r', encoding=encoding) as f:
+                                    with open(corrected_filename, "r", encoding=encoding) as f:
                                         json_data = json.load(f)
-                                    print(f"JSON lu avec encodage={encoding}")
+                                    print(f"----- JSON correctement décodé avec {encoding} -----")
                                     break
-                                except (UnicodeDecodeError, json.JSONDecodeError):
-                                    continue
-                            else:
-                                raise ValueError("Aucun encodage valide trouvé pour le JSON.")
-                            
-                            if isinstance(json_data, dict) and 'columns' in json_data and 'data' in json_data:
-                                json_data = [dict(zip(json_data['columns'], row)) for row in json_data['data']]
-                                with open(corrected_filename, 'w', encoding='utf-8') as f:
-                                    json.dump(json_data, f)
-                            
-                            df = spark.read.option("multiline", "true").option("inferSchema", "true").json(corrected_filename)
-                            for column in df.columns:
-                                if isinstance(df.schema[column].dataType, StructType):
-                                    for field in df.schema[column].dataType.fields:
-                                        df = df.withColumn(f"{column}.{field.name}", df[column][field.name])
-                                    df = df.drop(column)
-                                elif isinstance(df.schema[column].dataType, ArrayType):
-                                    df = df.withColumn(column, df[column].cast("string"))
-                            df.write.parquet(parquet_path, mode="overwrite")
+                                except UnicodeDecodeError as e:
+                                    last_error = e
+                                    print(f"----- Encodage incompatible : {encoding} -----")
+                                except json.JSONDecodeError as e:
+                                    raise ValueError(
+                                        f"Le fichier est décodable avec l'encodage {encoding}, "
+                                        f"mais son contenu JSON est invalide : {e}"
+                                    )
+                            if json_data is None:
+                                raise ValueError(
+                                    f"Impossible de décoder le fichier JSON."
+                                    f"Dernière erreur : {last_error}"
+                                )
+                            df = (
+                                spark.read
+                                .option("multiline", "true")
+                                .option("inferSchema", "true")
+                                .json(corrected_filename)
+                            )
+                            df.write.mode("overwrite").parquet(parquet_path)
                             pdf = df.limit(10).toPandas()
-                            df_json_str = pdf.to_json(orient="split")
-                            print(f"df_json_str (extrait) généré: {df_json_str[:3]}...")
+                            df_json_str = prepare_adaptive_preview(pdf)
+                            print(f"----- Taille module-cache : {len(json.dumps(cache, default=str))/ 1024 / 1024:.2f} Mo -----")
+                            print(f"----- Taille aperçu : {len(df_json_str or '')/ 1024 / 1024:.2f} Mo -----")
+                            print(
+                                f"----- Taille aperçu JSON : "
+                                f"{len(df_json_str) / 1024 / 1024:.2f} Mo -----"
+                            )
 
-                        # Traitement des fichiers CSV avec Spark
-                        elif corrected_filename.lower().endswith('.csv'):
-                            print("Traitement d'un gros fichier CSV avec Spark.")
-                            for encoding in ["utf-8", "iso-8859-1", "us-ascii", "utf-16", "utf-16be", "utf-16le", "utf-32"]:
+                        ##### Traitement des fichiers CSV avec Spark #####
+                        elif corrected_filename.lower().endswith(".csv"):
+                            print("----- Traitement d'un gros fichier CSV avec Spark. -----")
+                            encodings = [
+                                "UTF-8",
+                                "UTF-8-SIG",
+                                "ISO-8859-1",
+                                "Windows-1252",
+                                "UTF-16",
+                                "UTF-16LE",
+                                "UTF-16BE",
+                            ]
+                            df = None
+                            last_error = None
+                            for encoding in encodings:
                                 try:
-                                    df = spark.read.option("encoding", encoding).option("delimiter", ",").option("header", "true").option("inferSchema", "true").csv(corrected_filename)
-                                    print(f"Spark a lu le fichier avec l'encodage {encoding}")
-                                    df.write.parquet(parquet_path, mode="overwrite")
-                                    pdf = df.limit(10).toPandas()
-                                    df_json_str = pdf.to_json(orient="split")
-                                    print(f"df_json_str (extrait) généré: {df_json_str[:3]}...")
+                                    print(f"Test de l'encodage {encoding}")
+                                    candidate_df = (
+                                        spark.read
+                                        .option("encoding", encoding)
+                                        .option("delimiter", ",")
+                                        .option("header", "true")
+                                        .option("inferSchema", "true")
+                                        .csv(corrected_filename)
+                                    )
+                                    # Force une première lecture réelle
+                                    candidate_df.limit(1).collect()
+                                    df = candidate_df
+                                    print(f"CSV correctement lu avec l'encodage {encoding}")
                                     break
                                 except Exception as e:
-                                    print(f"Erreur avec encodage {encoding}: {str(e)}")
-                                    continue
-                            else:
-                                raise ValueError("Aucun encodage valide trouvé avec Spark.")
-                        else:
-                            raise ValueError("Type de fichier non pris en charge. Utilisez .csv ou .json")
+                                    last_error = e
+                                    print(f"Échec avec {encoding}: {type(e).__name__}: {e}")
+                            if df is None:
+                                raise ValueError(
+                                    f"Impossible de lire le CSV avec les encodages testés. "
+                                    f"Dernière erreur : {last_error}"
+                                )
+                            # Ces opérations ne doivent pas être dans la boucle d'encodage
+                            df.write.mode("overwrite").parquet(parquet_path)
+                            pdf = df.limit(10).toPandas()
+                            df_json_str = prepare_adaptive_preview(pdf)
+                            df_json_str = pdf.to_json(orient="split")
+                            print("----- Taille module-cache :", len(json.dumps(cache, default=str)), "-----")
+                            print("----- Taille aperçu :", len(df_json_str or ""), "-----")
+                            print(f"----- df_json_str (extrait) généré : {df_json_str[:100]} -----")
                     except Exception as e:
-                        error_dict['chargement'] = f"Erreur Spark: {str(e)}"
+                        traceback.print_exc()
+                        error_dict["chargement"] = f"Erreur Spark: {type(e).__name__}: {e}"
                         raise
 
                 # Succès : mise à jour des stores
                 error_dict.pop('chargement', None)
                 status_dict["chargement"] = True
-                print("Upload réussi - Dataset chargé")
+                print("----- Upload réussi - Dataset chargé -----")
                 original_parquet_path = parquet_path  # Stocker le chemin original
                 return [original_parquet_path, parquet_path, os.path.basename(corrected_filename), status_dict, False, error_dict, df_json_str, cache]
                 
             except Exception as e:
-                print(f"Erreur lors du traitement : {str(e)}")
+                print(f"----- Erreur lors du traitement : {str(e)} -----")
                 status_dict["chargement"] = False
                 error_dict['chargement'] = str(e)
                 if os.path.exists(corrected_filename):
                     os.remove(corrected_filename)
-                    print(f"Fichier temporaire {corrected_filename} supprimé en cas d'erreur")
+                    print(f"----- Fichier temporaire {corrected_filename} supprimé en cas d'erreur -----")
                 return [None, None, None, status_dict, True, error_dict, None, cache]
             finally:
                 if os.path.exists(corrected_filename):
                     os.remove(corrected_filename)
-                    print(f"Fichier temporaire {corrected_filename} supprimé (finally)")
+                    print(f"----- Fichier temporaire {corrected_filename} supprimé (finally) -----")
 
         raise dash.exceptions.PreventUpdate
 
@@ -409,23 +478,23 @@ def register_callbacks_chargement(app):
                 if os.path.exists(full_path):
                     if os.path.isdir(full_path):
                         shutil.rmtree(full_path)
-                        print(f"Dossier Parquet {full_path} supprimé")
+                        print(f"----- Dossier Parquet {full_path} supprimé -----")
                     else:
                         os.remove(full_path)
-                        print(f"Fichier Parquet {full_path} supprimé")
+                        print(f"----- Fichier Parquet {full_path} supprimé -----")
             
             upload_folder = os.path.join(os.path.dirname(os.path.dirname(__file__)), "tmp")
             if os.path.exists(upload_folder):
                 shutil.rmtree(upload_folder)
                 os.makedirs(upload_folder, exist_ok=True)
-                print("Dossier upload nettoyé (sécurité, mais vide ici)")
+                print(f"----- Dossier upload nettoyé (sécurité, mais vide ici) -----")
             
             # Reset des données
             status = {"chargement": False}
             error = {}
             cache_reset = {}
             
-            print("Reset effectué - Retour à l'état initial")
+            print("----- Reset effectué - Retour à l'état initial -----")
             return [None, None, None, status, True, error, None, cache_reset]
         
         raise dash.exceptions.PreventUpdate

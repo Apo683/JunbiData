@@ -1,5 +1,7 @@
 # app/utils/spark_utils.py
 from pyspark.sql import SparkSession
+import sys
+import tempfile
 import os
 import time
 from multiprocessing import cpu_count
@@ -19,7 +21,8 @@ def _default_local_dirs() -> str:
     if _is_wsl():
         base = os.path.expanduser("~/spark-tmp")
     else:
-        base = os.path.join(os.path.abspath(os.getenv("TMPDIR", "/tmp")), "spark-tmp")
+        base = os.path.join(tempfile.gettempdir(), "spark-tmp")
+
     os.makedirs(base, exist_ok=True)
     return base
 
@@ -45,7 +48,7 @@ def get_spark_session():
 
     # Defaults raisonnables
     master = _env("JUNBI_SPARK_MASTER", "local[*]")
-    driver_mem = _env("JUNBI_SPARK_DRIVER_MEMORY", "24g")
+    driver_mem = _env("JUNBI_SPARK_DRIVER_MEMORY", "8g")
     max_result = _env("JUNBI_SPARK_DRIVER_MAX_RESULT_SIZE", "2g")  # "0" pour illimité
     arrow_batch = int(_env("JUNBI_SPARK_ARROW_BATCH", "20000"))
     log_level = _env("JUNBI_SPARK_LOGLEVEL", "WARN")
@@ -62,10 +65,20 @@ def get_spark_session():
     else:
         shuffle_partitions = _env("JUNBI_SPARK_SHUFFLE_PARTITIONS", "400")
 
+    python_executable = sys.executable
+    os.environ["PYSPARK_PYTHON"] = python_executable
+    os.environ["PYSPARK_DRIVER_PYTHON"] = python_executable
+
     builder = (
         SparkSession.builder
         .appName("JunbiData")
         .master(master)
+        # Même Python pour le driver et les workers
+        .config("spark.pyspark.python", python_executable)
+        .config("spark.pyspark.driver.python", python_executable)
+        # Diagnostic des crashs Python
+        .config("spark.python.worker.faulthandler.enabled", "true")
+        .config("spark.sql.execution.pyspark.udf.faulthandler.enabled", "true")
         # Mémoire / résultats
         .config("spark.driver.memory", driver_mem)
         .config("spark.driver.maxResultSize", max_result)
@@ -103,12 +116,25 @@ def get_spark_session():
         cores = sc.defaultParallelism
     except Exception:
         cores = "n/a"
+    print(f"Python Spark : {python_executable}")
     print(
         f"[Spark] master={master} cores≈{cores} driverMemory={driver_mem} "
         f"shufflePartitions={shuffle_partitions} arrowBatch={arrow_batch} "
         f"localDirs={local_dirs}"
     )
     print(f"SparkSession créée en {time.time() - start_time:.2f} secondes")
+    print("Spark :", _spark_session.version)
+    print(
+        "Hadoop utilisé par Spark :",
+        _spark_session.sparkContext._jvm
+            .org.apache.hadoop.util.VersionInfo
+            .getVersion()
+    )
+    print(
+        "Java utilisé par Spark :",
+        _spark_session.sparkContext._jvm.java.lang.System
+            .getProperty("java.version")
+    )
     return _spark_session
 
 

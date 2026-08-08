@@ -4,6 +4,7 @@ from dash import html, dcc, dash_table
 import pandas as pd
 import math
 import re
+import json
 import plotly.express as px
 import plotly.io as pio
 from typing import Tuple, Optional, List
@@ -30,6 +31,10 @@ except Exception:
 
 _PERCENT_HINTS = ("%", "pourcent", "taux", "rate", "ratio")
 _COUNT_HINTS = ("compte", "count", "#", "n", "nb", "nombre", "occurrence", "fréquence")
+MAX_PREVIEW_ROWS = 10
+MAX_PREVIEW_COLUMNS = 50
+MAX_CELL_LENGTH = 100
+MAX_JSON_SIZE = 5 * 1024 * 1024  # 5 MB
 
 def is_spark_active() -> bool:
     return bool(HAS_SPARK and HAS_SPARK_UTILS and getattr(spark_utils, "is_spark_active", lambda: False)())
@@ -82,3 +87,105 @@ def _apply_smart_hover(fig, x_label: str, y_label: str):
     mode = _infer_hover_mode_from_ylabel(y_label)
     ht = _build_hovertemplate(x_label, y_label, mode)
     fig.update_traces(hovertemplate=ht)
+
+def _is_missing(value):
+    if value is None:
+        return True
+
+    if isinstance(value, float):
+        return math.isnan(value)
+
+    return False
+
+# Convertit une valeur JSON/Pandas en valeur compatible avec Dash DataTable.
+def _to_datatable_value(value):
+    if _is_missing(value):
+        return None
+
+    if isinstance(value, (list, tuple, dict)):
+        return json.dumps(
+            value,
+            ensure_ascii=False,
+            default=str
+        )
+
+    if isinstance(value, (date, datetime)):
+        return value.isoformat()
+
+    # Conversion des types numpy éventuels
+    if hasattr(value, "item"):
+        try:
+            value = value.item()
+        except (ValueError, TypeError):
+            return str(value)
+
+    if isinstance(value, (str, int, float, bool)) or value is None:
+        return value
+
+    return str(value)
+
+def truncate_preview_value(value, max_length=MAX_CELL_LENGTH):
+    if value is None:
+        return None
+
+    if isinstance(value, float) and math.isnan(value):
+        return None
+
+    if isinstance(value, (dict, list, tuple, set)):
+        value = json.dumps(
+            value,
+            ensure_ascii=False,
+            default=str
+        )
+
+    value = str(value)
+
+    if len(value) > max_length:
+        return value[:max_length] + "…"
+
+    return value
+
+def prepare_preview_dataframe(
+    df,
+    max_rows=MAX_PREVIEW_ROWS,
+    max_columns=MAX_PREVIEW_COLUMNS,
+    max_cell_length=MAX_CELL_LENGTH,
+):
+    preview_df = df.head(max_rows).iloc[:, :max_columns].copy()
+    # Évite les problèmes liés aux noms de colonnes non sérialisables
+    preview_df.columns = [str(column) for column in preview_df.columns]
+
+    for column in preview_df.columns:
+        preview_df[column] = preview_df[column].map(
+            lambda value: truncate_preview_value(
+                value,
+                max_length=max_cell_length
+            )
+        )
+
+    return preview_df
+
+def prepare_adaptive_preview(
+    df,
+    max_rows=MAX_PREVIEW_ROWS,
+    max_columns=MAX_PREVIEW_COLUMNS,
+    max_cell_length=MAX_CELL_LENGTH,
+    max_json_size=MAX_JSON_SIZE,
+):
+    for row_count in range(max_rows, 0, -1):
+        preview_df = prepare_preview_dataframe(
+            df,
+            max_rows=row_count,
+            max_columns=max_columns,
+            max_cell_length=max_cell_length,
+        )
+
+        json_str = preview_df.to_json(
+            orient="split",
+            force_ascii=False
+        )
+
+        if len(json_str.encode("utf-8")) <= max_json_size:
+            return json_str
+
+    return None
