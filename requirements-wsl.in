@@ -1,0 +1,35 @@
+# Interface et API
+streamlit
+dash
+dash-bootstrap-components
+dash-uploader==0.7.0a2
+fastapi
+flask
+uvicorn
+gradio
+
+# Traitement de données
+polars
+duckdb
+pandas==2.3.3
+pyarrow
+pyspark
+
+# Machine learning
+scikit-learn
+
+# Visualisation
+plotly
+matplotlib
+seaborn
+altair
+
+# Fichiers et configuration
+openpyxl
+aiofiles
+python-dotenv
+watchdog
+
+# Bases de données et cloud
+sqlalchemy
+boto3
