@@ -70,6 +70,7 @@ def build_layout():
         dcc.Store(id="parquet-path-store", data=None),
         dcc.Store(id="original-parquet-path-store", data=None),
         dcc.Store(id="df-json-store", data=None),
+        dcc.Store(id="pipeline-store", data=[]),
 
         # Navigation
         html.Div(id="step-navigation", style={"marginBottom": "25px"}),
