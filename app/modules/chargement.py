@@ -7,6 +7,7 @@ import os
 import shutil
 import json
 import uuid
+import numpy as np
 import pandas as pd
 import traceback
 
@@ -17,38 +18,131 @@ from datetime import date, datetime
 
 from app.modules.common.io import prepare_preview_dataframe, prepare_adaptive_preview, truncate_preview_value
 
+# Normalisation des marqueurs manquants
+### Pandas
+DEFAULT_MISSING_MARKERS = {
+    "",
+    " ",
+    "na",
+    "n/a",
+    "nan",
+    "null",
+    "none",
+}
+
+def normalize_missing_markers_pandas(df: pd.DataFrame, markers=None, strip_spaces=True):
+    """
+    Convertit uniquement certains marqueurs textuels en valeurs manquantes.
+
+    Retourne :
+        df_normalized, normalization_info
+    """
+
+    if markers is None:
+        markers = DEFAULT_MISSING_MARKERS
+
+    markers = {
+        str(marker).strip().lower()
+        for marker in markers
+    }
+
+    result = df.copy()
+    info = {
+        "operation": "normalize_missing_markers",
+        "columns": {},
+        "total_replaced": 0,
+    }
+
+    for col in result.columns:
+        if not (
+            pd.api.types.is_object_dtype(result[col])
+            or pd.api.types.is_string_dtype(result[col])
+        ):
+            continue
+        values = result[col].astype("string")
+
+        if strip_spaces:
+            values = values.str.strip()
+
+        normalized = values.str.lower()
+        mask = normalized.isin(markers)
+        replaced_count = int(mask.sum())
+
+        if replaced_count > 0:
+            result.loc[mask, col] = pd.NA
+            info["columns"][col] = {
+                "replaced": replaced_count
+            }
+
+        info["total_replaced"] += replaced_count
+
+    return result, info
+
+### Spark
+from pyspark.sql import functions as F
+from pyspark.sql.types import StringType
+
+
+def normalize_missing_markers_spark(df, markers=None, strip_spaces=True):
+    if markers is None:
+        markers = DEFAULT_MISSING_MARKERS
+
+    markers = {
+        str(marker).strip().lower()
+        for marker in markers
+    }
+
+    result = df
+    info = {
+        "operation": "normalize_missing_markers",
+        "columns": {},
+        "total_replaced": 0,
+    }
+
+    for field in df.schema.fields:
+        if not isinstance(field.dataType, StringType):
+            continue
+
+        col_name = field.name
+        value = F.col(col_name)
+
+        normalized = F.lower(F.trim(value)) if strip_spaces else F.lower(value)
+        condition = normalized.isin(list(markers))
+
+        replaced_count = (
+            df.select(
+                F.sum(F.when(condition, 1).otherwise(0))
+                .alias("count")
+            )
+            .collect()[0]["count"]
+        )
+
+        replaced_count = int(replaced_count or 0)
+        if replaced_count > 0:
+            info["columns"][col_name] = {
+                "replaced": replaced_count
+            }
+        info["total_replaced"] += replaced_count
+
+        result = result.withColumn(
+            col_name,
+            F.when(condition, F.lit(None).cast(StringType()))
+             .otherwise(F.col(col_name))
+        )
+
+    return result, info
+
 # Génération des résultats de l'upload
-def generate_upload_info(parquet_path, filename):
+def generate_upload_info(parquet_path, filename, metadata=None):
     print(f"generate_upload_info: Vérification de {parquet_path}")
-    if parquet_path and os.path.exists(parquet_path):
-        if "large_dataset_parquet" in parquet_path:
-            spark = spark_utils.get_spark_session()  # Utiliser la SparkSession globale
-            try:
-                parquet_df = spark.read.parquet(parquet_path)
-                row_count = parquet_df.count()
-                col_count = len(parquet_df.columns)
-                print(f"Large dataset: {row_count} lignes, {col_count} colonnes")
-            except Exception as e:
-                print(f"Erreur Spark: {e}")
-                row_count = 0
-                col_count = 0
-        elif "small_dataset_parquet" in parquet_path:
-            try:
-                df = pd.read_parquet(parquet_path)
-                row_count = len(df)
-                col_count = len(df.columns)
-                print(f"Small dataset: {row_count} lignes, {col_count} colonnes")
-            except Exception as e:
-                print(f"Erreur Pandas: {e}")
-                row_count = 0
-                col_count = 0
-    else:
-        print(f"Fichier non trouvé: {parquet_path}")
-        row_count = 0
-        col_count = 0
+    metadata = metadata or {}
+
+    row_count = metadata.get("row_count", 0)
+    column_count = metadata.get("column_count", 0)
+
     return html.Div([
         html.P(f"✅ Fichier '{filename}' chargé avec succès !"),
-        html.P(f"🔢 Ce jeu de données contient {row_count} lignes et {col_count} colonnes")
+        html.P(f"🔢 Ce jeu de données contient {row_count} lignes et {column_count} colonnes")
     ])
 
 def show_dataset_preview(df_json, n_rows=10):
@@ -99,7 +193,7 @@ def show_dataset_preview(df_json, n_rows=10):
         )
 
 # 🎯 Rendu dynamique du module chargement selon l'état d'upload
-def get_content(show_upload=True, parquet_path=None, filename=None, df_json=None, error=None):
+def get_content(show_upload=True, parquet_path=None, filename=None, df_json=None, error=None, cache=None):
     print(f"get_content appelé avec show_upload={show_upload}, parquet_path={parquet_path}, filename={filename}, df_json présent={df_json is not None}")
     
     # Validation du paramètre error
@@ -144,8 +238,14 @@ def get_content(show_upload=True, parquet_path=None, filename=None, df_json=None
     ], style={"display": "block" if show_upload else "none", "position": "relative"})
 
     # Informations et aperçu du dataset (visible uniquement si dataset chargé)
+    if not isinstance(cache, dict):
+        cache = {}
+    metadata = cache.get("chargement", {})
+    print("CACHE REÇU PAR get_content :", cache)
+    print("METADATA :", metadata)
+    metadata = cache.get("chargement", {}) if cache else {}
     additional_info = html.Div([
-        generate_upload_info(parquet_path, filename),
+        generate_upload_info(parquet_path, filename, metadata),
         show_dataset_preview(df_json) if df_json else html.Div("⚠️ Aucun aperçu disponible.")
     ], style={"marginTop": "10px", "display": "block" if parquet_path else "none"})
 
@@ -287,7 +387,19 @@ def register_callbacks_chargement(app):
                             if nested_cols:
                                 df = pd.json_normalize(json_data)
                                 print("----- Normalisation JSON appliquée -----")
+                            ### Normalisation des marqueurs manquants
+                            try:
+                                df, normalization_info = normalize_missing_markers_pandas(df)
+                            except Exception as e:
+                                print(f"----- Erreur normalisation marqueurs manquants : {e} -----")
+                                traceback.print_exc()
+                                error_dict["chargement"] = (
+                                    f"Erreur lors de la normalisation automatique : {str(e)}"
+                                )
+                                raise                          
+                            ### Sauvegarde en Parquet
                             df.to_parquet(parquet_path)
+                            ### Génération de l'aperçu JSON
                             df_json_str = prepare_adaptive_preview(df)
                             print(f"df_json_str (extrait) généré: {df_json_str[:3]}...")
                         except (json.JSONDecodeError, ValueError, Exception) as e:
@@ -321,7 +433,19 @@ def register_callbacks_chargement(app):
                                     continue
                             else:
                                 raise ValueError("Erreur d'encodage avec Pandas.")
+                            ### Normalisation des marqueurs manquants
+                            try:
+                                df, normalization_info = normalize_missing_markers_pandas(df)
+                            except Exception as e:
+                                print(f"----- Erreur normalisation marqueurs manquants : {e} -----")
+                                traceback.print_exc()
+                                error_dict["chargement"] = (
+                                    f"Erreur lors de la normalisation automatique : {str(e)}"
+                                )
+                                raise                             
+                            ### Sauvegarde en Parquet
                             df.to_parquet(parquet_path)
+                            ### Génération de l'aperçu JSON
                             df_json_str = prepare_adaptive_preview(df)
                             print(f"----- df_json_str (extrait) généré: {df_json_str[:3]}... -----")
                         except (ValueError, Exception) as e:
@@ -358,13 +482,28 @@ def register_callbacks_chargement(app):
                                     f"Impossible de décoder le fichier JSON."
                                     f"Dernière erreur : {last_error}"
                                 )
+                            ### Lecture du JSON avec Spark
                             df = (
                                 spark.read
                                 .option("multiline", "true")
                                 .option("inferSchema", "true")
                                 .json(corrected_filename)
                             )
+                            ### Normalisation des marqueurs manquants
+                            try:
+                                df, normalization_info = normalize_missing_markers_spark(df)
+
+                            except Exception as e:
+                                print(f"----- Erreur normalisation Spark : {e} -----")
+                                traceback.print_exc()
+
+                                error_dict["chargement"] = (
+                                    f"Erreur lors de la normalisation automatique : {str(e)}"
+                                )
+                                raise
+                            ### Sauvegarde en Parquet
                             df.write.mode("overwrite").parquet(parquet_path)
+                            ### Génération de l'aperçu JSON
                             pdf = df.limit(10).toPandas()
                             df_json_str = prepare_adaptive_preview(pdf)
                             print(f"----- Taille module-cache : {len(json.dumps(cache, default=str))/ 1024 / 1024:.2f} Mo -----")
@@ -388,6 +527,7 @@ def register_callbacks_chargement(app):
                             ]
                             df = None
                             last_error = None
+                            ### Tentative de lecture du CSV avec différents encodages
                             for encoding in encodings:
                                 try:
                                     print(f"Test de l'encodage {encoding}")
@@ -412,8 +552,21 @@ def register_callbacks_chargement(app):
                                     f"Impossible de lire le CSV avec les encodages testés. "
                                     f"Dernière erreur : {last_error}"
                                 )
-                            # Ces opérations ne doivent pas être dans la boucle d'encodage
+                            ### Normalisation des marqueurs manquants
+                            try:
+                                df, normalization_info = normalize_missing_markers_spark(df)
+
+                            except Exception as e:
+                                print(f"----- Erreur normalisation Spark : {e} -----")
+                                traceback.print_exc()
+
+                                error_dict["chargement"] = (
+                                    f"Erreur lors de la normalisation automatique : {str(e)}"
+                                )
+                                raise
+                            ### Sauvegarde en Parquet
                             df.write.mode("overwrite").parquet(parquet_path)
+                            ### Génération de l'aperçu JSON
                             pdf = df.limit(10).toPandas()
                             df_json_str = prepare_adaptive_preview(pdf)
                             df_json_str = pdf.to_json(orient="split")
@@ -430,6 +583,28 @@ def register_callbacks_chargement(app):
                 status_dict["chargement"] = True
                 print("----- Upload réussi - Dataset chargé -----")
                 original_parquet_path = parquet_path  # Stocker le chemin original
+
+                # Mise à jour du cache du module
+                if is_large_dataset:
+                    backend = "spark"
+                    row_count = df.count()
+                    column_count = len(df.columns)
+                else:
+                    backend = "pandas"
+                    row_count = len(df)
+                    column_count = len(df.columns)
+
+                cache.setdefault("chargement", {}).update({
+                    "filename": os.path.basename(corrected_filename),
+                    "parquet_path": parquet_path,
+                    "backend": backend,
+                    "row_count": row_count,
+                    "column_count": column_count,
+                    "file_size_mb": round(file_size, 2),
+                    "processed_at": datetime.now().isoformat(timespec="seconds"),
+                    "normalization_info": normalization_info,
+                })
+
                 return [original_parquet_path, parquet_path, os.path.basename(corrected_filename), status_dict, False, error_dict, df_json_str, cache]
                 
             except Exception as e:
