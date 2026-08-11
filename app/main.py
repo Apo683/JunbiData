@@ -141,7 +141,7 @@ def update_chargement_module(show_upload, parquet_path, filename, df_json, modul
 
     cache = module_cache.copy()
     validated = module_status.get("chargement", False)
-    content = get_chargement(show_upload=show_upload, parquet_path=parquet_path, filename=filename, df_json=df_json, error=error_store)
+    content = get_chargement(show_upload=show_upload, parquet_path=parquet_path, filename=filename, df_json=df_json, error=error_store,cache=cache)
 
     return content, cache, df_json
 
