@@ -121,11 +121,11 @@ def update_navigation(active_key, status):
 @callback(
     [Output("module-chargement", "children"),
      Output("module-cache", "data"),
-     Output("df-json-store", "data")],  # Ajout de la mise à jour du store df_json
+     Output("df-json-store", "data")],
     [Input("show-upload", "data"),
      Input("parquet-path-store", "data"),
      Input("filename-store", "data"),
-     Input("df-json-store", "data")],  # Ajout comme input pour détecter les changements
+     Input("df-json-store", "data")],
     [State("module-cache", "data"),
      State("module-status", "data"),
      State("error-store", "data")]
@@ -138,16 +138,11 @@ def update_chargement_module(show_upload, parquet_path, filename, df_json, modul
         module_status = {"chargement": False}
     if not isinstance(error_store, dict):
         error_store = {}
-        
+
     cache = module_cache.copy()
     validated = module_status.get("chargement", False)
-
-    if validated and "chargement" in cache:
-        return cache["chargement"], cache, df_json
-
     content = get_chargement(show_upload=show_upload, parquet_path=parquet_path, filename=filename, df_json=df_json, error=error_store)
-    if validated:
-        cache["chargement"] = content
+
     return content, cache, df_json
 
 # 🔄 Mise à jour du module actif
