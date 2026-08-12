@@ -100,7 +100,7 @@ def register_callbacks(app):
     # Remplir le sélecteur de colonne pour les détails
     @app.callback(
         Output("duplicates-column-selector", "options"),
-        Input("parquet-path-store", "data")
+        Input("original-parquet-path-store", "data")
     )
     def fill_duplicates_selector(parquet_path):
         df, is_spark = load_df(parquet_path)
@@ -112,7 +112,7 @@ def register_callbacks(app):
     # Graphiques overview (Nb valeurs dupliquées / % de lignes dupliquées)
     @app.callback(
         Output("duplicates-overview-container", "children"),
-        Input("parquet-path-store", "data"),
+        Input("original-parquet-path-store", "data"),
         Input("duplicates-display-mode", "value")
     )
     def update_duplicates_overview(parquet_path, display_mode):
@@ -161,7 +161,7 @@ def register_callbacks(app):
     # Détails d'une colonne (valeurs dupliquées, top 50)
     @app.callback(
         Output("duplicates-details-container", "children"),
-        Input("parquet-path-store", "data"),
+        Input("original-parquet-path-store", "data"),
         Input("duplicates-column-selector", "value")
     )
     def update_duplicates_details(parquet_path, selected_column):

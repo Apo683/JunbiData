@@ -542,6 +542,10 @@ def get_tab():
 
 def get_layout(STYLE_DROPDOWN):    
     return html.Div([
+        html.P(
+            "Conversion du type des colonnes (choisir la conversion puis appliquer) :",
+            style={"fontSize": "18px", "marginBottom": "10px"},
+        ),
         dbc.Row([
             html.Div(id="original-dataset-preview", style={"marginBottom": "15px"})
         ]),
@@ -565,6 +569,7 @@ def get_layout(STYLE_DROPDOWN):
                 ),
             ], md=10)
         ]),
+        html.Hr(),
 
         html.Div(
             id="fmt-rules-container",
@@ -612,7 +617,7 @@ def register_callbacks(app):
     @app.callback(
     Output("fmt-columns", "options"),
     Output("fmt-columns", "value"),
-    Input("parquet-path-store", "data"),
+    Input("original-parquet-path-store", "data"),
     prevent_initial_call=False
     )
     def populate_format_checklist(path):
@@ -636,7 +641,7 @@ def register_callbacks(app):
     @app.callback(
         Output("fmt-rules-container", "children"),
         Input("fmt-columns", "value"),
-        State("parquet-path-store", "data")
+        State("original-parquet-path-store", "data")
     )
     def render_format_rules(selected_columns, path):
         if not selected_columns or not path:
@@ -718,7 +723,7 @@ def register_callbacks(app):
         Output("fmt-feedback", "children"),
         Input("fmt-apply", "n_clicks"),
         Input("fmt-reset", "n_clicks"),
-        State("parquet-path-store", "data"),
+        State("original-parquet-path-store", "data"),
         State({
             "type": "fmt-strategy",
             "column": ALL

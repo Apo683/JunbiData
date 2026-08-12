@@ -329,7 +329,7 @@ def register_callbacks(app):
     # 1) Alimente la checklist des colonnes numériques
     @app.callback(
         Output("outliers-columns-checklist", "options"),
-        Input("parquet-path-store", "data"),
+        Input("original-parquet-path-store", "data"),
         prevent_initial_call=True,
     )
     def fill_columns(parquet_path):
@@ -342,7 +342,7 @@ def register_callbacks(app):
     # 2) Vue globale
     @app.callback(
         Output("outliers-overview-container", "children"),
-        Input("parquet-path-store", "data"),
+        Input("original-parquet-path-store", "data"),
         Input("outliers-method", "value"),
         Input("outliers-iqr-k", "value"),
         Input("outliers-z-th", "value"),
@@ -404,7 +404,7 @@ def register_callbacks(app):
     # 3) Détails (plots par colonne sélectionnée)
     @app.callback(
         Output("outliers-details-container", "children"),
-        Input("parquet-path-store", "data"),
+        Input("original-parquet-path-store", "data"),
         Input("outliers-columns-checklist", "value"),
         Input("outliers-method", "value"),
         Input("outliers-iqr-k", "value"),

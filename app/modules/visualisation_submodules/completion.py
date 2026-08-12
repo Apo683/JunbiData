@@ -257,7 +257,7 @@ def register_callbacks(app):
     # Moyenne
     @app.callback(
         Output("completion-mean-container", "children"),
-        Input("parquet-path-store", "data")
+        Input("original-parquet-path-store", "data")
     )
     def update_mean(parquet_path):
         spark_df, is_spark = load_df(parquet_path)
@@ -266,7 +266,7 @@ def register_callbacks(app):
     # Colonnes
     @app.callback(
         Output("completion-cols-container", "children"),
-        Input("parquet-path-store", "data"),
+        Input("original-parquet-path-store", "data"),
         Input("completion-display-mode-cols", "value"),
         prevent_initial_call=False
     )
@@ -281,7 +281,7 @@ def register_callbacks(app):
         Output("completion-rows-container", "children"),
         Output("page-select-rows", "options"),
         Output("page-select-rows", "value"),
-        Input("parquet-path-store", "data"),
+        Input("original-parquet-path-store", "data"),
         Input("completion-display-mode-rows", "value"),
         Input("prev-page-rows", "n_clicks"),
         Input("next-page-rows", "n_clicks"),

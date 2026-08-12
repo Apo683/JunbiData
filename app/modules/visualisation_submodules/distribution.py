@@ -157,7 +157,7 @@ def register_callbacks(app):
     @app.callback(
         Output("column-selection-checklist", "options"),
         Output("column-selection-checklist", "value"),
-        Input("parquet-path-store", "data"),
+        Input("original-parquet-path-store", "data"),
     )
     def fill_columns(parquet_path):
         df, is_spark = load_df(parquet_path)
@@ -170,7 +170,7 @@ def register_callbacks(app):
     # Graphs
     @app.callback(
         Output("distribution-container", "children"),
-        Input("parquet-path-store", "data"),
+        Input("original-parquet-path-store", "data"),
         Input("column-selection-checklist", "value"),
     )
     def update_distribution(parquet_path, selected_columns):

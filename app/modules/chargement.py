@@ -278,7 +278,6 @@ def register_callbacks_chargement(app):
     @du.callback(
         output=[
             Output("original-parquet-path-store", "data"),
-            Output("parquet-path-store", "data"),
             Output("filename-store", "data"),
             Output("module-status", "data"),
             Output("show-upload", "data"),
@@ -605,7 +604,7 @@ def register_callbacks_chargement(app):
                     "normalization_info": normalization_info,
                 })
 
-                return [original_parquet_path, parquet_path, os.path.basename(corrected_filename), status_dict, False, error_dict, df_json_str, cache]
+                return [original_parquet_path, os.path.basename(corrected_filename), status_dict, False, error_dict, df_json_str, cache]
                 
             except Exception as e:
                 print(f"----- Erreur lors du traitement : {str(e)} -----")
@@ -614,7 +613,9 @@ def register_callbacks_chargement(app):
                 if os.path.exists(corrected_filename):
                     os.remove(corrected_filename)
                     print(f"----- Fichier temporaire {corrected_filename} supprimé en cas d'erreur -----")
-                return [None, None, None, status_dict, True, error_dict, None, cache]
+
+                return [None, None, status_dict, True, error_dict, None, cache]
+
             finally:
                 if os.path.exists(corrected_filename):
                     os.remove(corrected_filename)
@@ -625,7 +626,6 @@ def register_callbacks_chargement(app):
     # 2️⃣ CALLBACK RESET - Traite uniquement les resets
     @app.callback(
         [Output("original-parquet-path-store", "data", allow_duplicate=True),
-         Output("parquet-path-store", "data", allow_duplicate=True),
          Output("filename-store", "data", allow_duplicate=True),
          Output("module-status", "data", allow_duplicate=True),
          Output("show-upload", "data", allow_duplicate=True),
@@ -636,11 +636,10 @@ def register_callbacks_chargement(app):
         [State("module-status", "data"),
          State("error-store", "data"),
          State("module-cache", "data"),
-         State("original-parquet-path-store", "data"),
-         State("parquet-path-store", "data")],
+         State("original-parquet-path-store", "data")],
         prevent_initial_call=True
     )
-    def handle_reset(reset_clicks, current_status, current_error, cache, parquet_path, active_parquet_path):
+    def handle_reset(reset_clicks, current_status, current_error, cache, parquet_path):
         print(f"=== CALLBACK RESET - Clicks: {reset_clicks} ===")
         
         if reset_clicks and reset_clicks > 0:
@@ -670,6 +669,6 @@ def register_callbacks_chargement(app):
             cache_reset = {}
             
             print("----- Reset effectué - Retour à l'état initial -----")
-            return [None, None, None, status, True, error, None, cache_reset]
+            return [None, None, status, True, error, None, cache_reset]
         
         raise dash.exceptions.PreventUpdate

@@ -58,7 +58,7 @@ def register_callbacks(app):
     # Remplit le sélecteur de colonne pour les détails
     @app.callback(
         Output("unique-values-column-selector", "options"),
-        Input("parquet-path-store", "data")
+        Input("original-parquet-path-store", "data")
     )
     def fill_unique_selector(parquet_path):
         df, is_spark = load_df(parquet_path)
@@ -70,7 +70,7 @@ def register_callbacks(app):
     # Graphiques Nombre + Pourcentage
     @app.callback(
         Output("unique-values-container", "children"),
-        Input("parquet-path-store", "data"),
+        Input("original-parquet-path-store", "data"),
         Input("unique-values-display-mode", "value")
     )
     def update_unique_graphs(parquet_path, display_mode):
@@ -117,7 +117,7 @@ def register_callbacks(app):
     # Détails d’une colonne (top 50)
     @app.callback(
         Output("unique-values-details-container", "children"),
-        Input("parquet-path-store", "data"),
+        Input("original-parquet-path-store", "data"),
         Input("unique-values-column-selector", "value")
     )
     def update_unique_details(parquet_path, selected_column):
