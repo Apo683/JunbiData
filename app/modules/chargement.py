@@ -425,7 +425,15 @@ def register_callbacks_chargement(app):
                             for encoding in ["utf-8", "utf-8-sig", "latin-1"]:
                                 try:
                                     with open(corrected_filename, 'r', encoding=encoding) as f:
-                                        df = pd.read_csv(io.StringIO(f.read()), sep=separator, engine='python')
+                                        df = pd.read_csv(
+                                            corrected_filename,
+                                            sep=separator,
+                                            engine="python",
+                                            quotechar='"',
+                                            doublequote=True,
+                                            encoding=encoding,
+                                            on_bad_lines="error"
+                                        )
                                     print(f"----- CSV lu avec encodage={encoding} -----")
                                     break
                                 except UnicodeDecodeError:
@@ -532,12 +540,29 @@ def register_callbacks_chargement(app):
                                     print(f"Test de l'encodage {encoding}")
                                     candidate_df = (
                                         spark.read
-                                        .option("encoding", encoding)
-                                        .option("delimiter", ",")
+                                        .format("csv")
                                         .option("header", "true")
+                                        .option("sep", ",")
+                                        .option("encoding", encoding)
+                                        .option("quote", '"')
+                                        .option("escape", '"')
+                                        .option("multiLine", "true")
+                                        .option("mode", "PERMISSIVE")
                                         .option("inferSchema", "true")
+                                        .option("columnNameOfCorruptRecord", "_corrupt_record")
                                         .csv(corrected_filename)
                                     )
+                                    if "_corrupt_record" in candidate_df.columns:
+                                        corrupt_count = candidate_df.filter(
+                                            F.col("_corrupt_record").isNotNull()
+                                        ).count()
+
+                                        if corrupt_count > 0:
+                                            raise ValueError(
+                                                f"{corrupt_count} ligne(s) CSV sont mal formées."
+                                            )
+
+                                        candidate_df = candidate_df.drop("_corrupt_record")
                                     # Force une première lecture réelle
                                     candidate_df.limit(1).collect()
                                     df = candidate_df
