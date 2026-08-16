@@ -73,18 +73,7 @@ def is_boolean_compatible(series):
         and bool(values & BOOLEAN_FALSE_VALUES)
     )
 
-def apply_formats(df, rules, is_spark=None):
-    if df is None:
-        raise ValueError("Dataset absent.")
-
-    if not rules:
-        return df
-
-    # Détection automatique du moteur
-    if is_spark is None:
-        is_spark = hasattr(df, "withColumn") and hasattr(df, "schema")
-
-    # SPARK
+def apply_formats_spark(df, rules, is_spark=None):
     if is_spark:
         from pyspark.sql import functions as F
         from pyspark.sql.types import (
@@ -93,6 +82,14 @@ def apply_formats(df, rules, is_spark=None):
             DateType,
             TimestampType
         )
+
+        print("=== COLONNES SPARK ===")
+        print(df.columns)
+
+        for rule in rules:
+            print("=== REGLE SPARK ===")
+            print(rule)
+            print(df.select(rule["column"]).limit(5).collect())
 
         sdf = df
         spark_types = dict(sdf.dtypes)
@@ -293,7 +290,7 @@ def apply_formats(df, rules, is_spark=None):
 
         return sdf
 
-    # PANDAS
+def apply_formats_pandas(df, rules, is_spark=None):
     pdf = df.copy()
 
     def check_column(column):
@@ -460,10 +457,8 @@ def get_column_dtype(df, column, is_spark=False):
 
     return df[column].dtype
 
+# Retourne les stratégies compatibles avec le type actuel.
 def get_format_options(dtype, is_spark=False):
-    """
-    Retourne les stratégies compatibles avec le type actuel.
-    """
 
     if is_spark:
         from pyspark.sql.types import (
@@ -534,8 +529,65 @@ def get_format_options(dtype, is_spark=False):
         if option["value"] in allowed
     ]
 
+def get_format_rules_from_pipeline(pipeline):
+    if not pipeline:
+        return {}
+    print(f"--------- Pipeline : {pipeline} ---------")
+    rules_by_column = {}
 
-### Fonctions DASH
+    for step in pipeline:
+        if step.get("step") != "formats":
+            continue
+
+        for rule in step.get("params", []):
+            column = rule.get("column")
+            action = rule.get("action")
+
+            if column and action:
+                # La dernière règle gagne
+                rules_by_column[column] = action
+
+    return rules_by_column
+
+def build_format_rule_row(column, current_dtype, selected_action=None, is_spark=False,):
+    options = get_format_options(
+        current_dtype,
+        is_spark=is_spark
+    )
+
+    return dbc.Row([
+        dbc.Col(
+            html.Strong(column),
+            xs=12,
+            md=2
+        ),
+        dbc.Col(
+            html.Span(
+                f"Type actuel : {current_dtype}"
+            ),
+            xs=12,
+            md=2
+        ),
+        dbc.Col(
+            dcc.Dropdown(
+                id={
+                    "type": "fmt-strategy",
+                    "column": column,
+                },
+                options=options,
+                value=selected_action,
+                clearable=True,
+                placeholder="Choisir une stratégie",
+                style=STYLE_DROPDOWN,
+            ),
+            xs=12,
+            md=8
+        ),
+    ], className="mb-2")
+
+# =========================================================
+# Fonctions DASH
+# =========================================================
 
 def get_tab():
     return dbc.Tab(tab_id=TAB_ID, label="Formats")
@@ -602,31 +654,38 @@ def register_callbacks(app):
     
     @app.callback(
         Output("fmt-reset", "style"),
-        Input("pipeline-store", "data")
+        Input("pipeline-store", "data"),
+        Input("cleaning-subtabs", "active_tab")
     )
-    def update_formats_reset_button(pipeline):
+    def update_formats_reset_button(pipeline, active_tab):
         has_formats = any(
             step.get("step") == "formats"
             for step in (pipeline or [])
         )
 
         return {
-            "display": "inline-block" if has_formats else "none",
+            "display": "inline-block"
+            if active_tab == TAB_ID and has_formats
+            else "none",
+            "marginTop": "6px",
+            "marginBottom": "6px",
         }
     
     @app.callback(
     Output("fmt-columns", "options"),
     Output("fmt-columns", "value"),
     Input("original-parquet-path-store", "data"),
+    Input("pipeline-store", "data"),
     prevent_initial_call=False
     )
-    def populate_format_checklist(path):
+    def populate_format_checklist(path, pipeline):
         df, is_spark = load_df(path)
 
         if df is None:
             return [], []
 
         columns = list(df.columns)
+        existing_rules = get_format_rules_from_pipeline(pipeline)
 
         options = [
             {
@@ -635,20 +694,27 @@ def register_callbacks(app):
             }
             for column in columns
         ]
+        selected_columns = [
+            column for column in columns
+            if column in existing_rules
+        ]
 
-        return options, []
+        return options, selected_columns
 
     @app.callback(
         Output("fmt-rules-container", "children"),
         Input("fmt-columns", "value"),
-        State("original-parquet-path-store", "data")
+        Input("pipeline-store", "data"),
+        State("original-parquet-path-store", "data"),
     )
-    def render_format_rules(selected_columns, path):
-        if not selected_columns or not path:
+    def render_format_rules(selected_columns, pipeline, path):
+        if not path:
             return html.Div(
-                "Sélectionnez une ou plusieurs colonnes.",
+                "Aucun dataset chargé.",
                 className="text-muted"
             )
+
+        selected_columns = selected_columns or []
 
         df, is_spark = load_df(path)
 
@@ -658,65 +724,44 @@ def register_callbacks(app):
                 className="text-danger"
             )
 
+        existing_rules = get_format_rules_from_pipeline(pipeline)
         rows = []
 
         for column in selected_columns:
             try:
-                column_dtype = get_column_dtype(
+                # Le type est récupéré pour chaque colonne
+                current_dtype = get_column_dtype(
                     df,
                     column,
                     is_spark=is_spark
                 )
 
-                if is_spark:
-                    current_dtype = column_dtype.simpleString()
-                else:
-                    current_dtype = str(column_dtype)
+                # Stratégie déjà enregistrée dans le pipeline, si elle existe
+                selected_action = existing_rules.get(column)
 
-                options = get_format_options(
-                    column_dtype,
-                    is_spark=is_spark
-                )
-
-            except ValueError as error:
-                return html.Div(
-                    f"⚠️ {error}",
-                    className="text-danger"
-                )
-
-            rows.append(
-                dbc.Row([
-                    dbc.Col(
-                        html.Strong(column),
-                        xs=12,
-                        md=2
-                    ),
-                    dbc.Col(
-                        html.Span(
-                            f"Type actuel : {current_dtype}"
-                        ),
-                        xs=12,
-                        md=2
-                    ),
-                    dbc.Col(
-                        dcc.Dropdown(
-                            id={
-                                "type": "fmt-strategy",
-                                "column": column
-                            },
-                            options=options,
-                            value=None,
-                            clearable=True,
-                            placeholder="Choisir une stratégie",
-                            style=STYLE_DROPDOWN
-                        ),
-                        xs=12,
-                        md=8
+                rows.append(
+                    build_format_rule_row(
+                        column=column,
+                        current_dtype=current_dtype,
+                        selected_action=selected_action,
+                        is_spark=is_spark,
                     )
-                ], className="mb-2")
+                )
+
+            except Exception as exc:
+                rows.append(
+                    dbc.Alert(
+                        f"Erreur pour '{column}' : {exc}",
+                        color="danger"
+                    )
+                )
+
+        if not rows:
+            return html.Div(
+                "Sélectionnez une ou plusieurs colonnes.",
             )
 
-        return html.Div(rows)
+        return rows
     
     @app.callback(
         Output("pipeline-store", "data"),
@@ -735,16 +780,11 @@ def register_callbacks(app):
         State("pipeline-store", "data"),
         prevent_initial_call=True
     )
-    def on_apply_formats_click(
-        apply_clicks,
-        reset_clicks,
-        path,
-        strategies,
-        strategy_ids,
-        pipeline
-    ):
+    def on_apply_formats_click(apply_clicks, reset_clicks, path, strategies, strategy_ids, pipeline):
         from app.modules.common.pipeline import add_step, reset_step
-
+        print("STRATEGIES :", strategies)
+        print("STRATEGY IDS :", strategy_ids)
+        
         pipeline = pipeline or []
 
         if not ctx.triggered_id:
@@ -783,15 +823,28 @@ def register_callbacks(app):
             return pipeline, format_warning(
                 "Aucune stratégie de format sélectionnée."
             )
-
+        print("=== RULES ENVOYEES ===")
+        print(rules)
+        
         try:
             df, is_spark = load_df(path)
 
             if df is None:
                 return pipeline, format_warning("Aucun dataset chargé.")
 
+            if not rules:
+                return df
+
+            # Détection automatique du moteur
+            if is_spark is None:
+                is_spark = hasattr(df, "withColumn") and hasattr(df, "schema")
+
             # Étape de validation : on vérifie que les transformations sont exécutables
-            apply_formats(df, rules, is_spark)
+            if is_spark is False:
+                apply_formats_pandas(df, rules, is_spark)
+
+            elif is_spark is True:
+                apply_formats_spark(df, rules, is_spark)
 
             new_step = {
                 "step": "formats",
