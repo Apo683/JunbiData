@@ -16,7 +16,7 @@ except Exception:
 
 from app.modules.common.io import load_df, format_warning
 from app.modules.common.viz import _get_common_layout
-from app.modules.common.ui import CHECKLIST_STYLE, CHECKLIST_INPUT_STYLE, CHECKLIST_LABEL_STYLE
+from app.modules.common.ui import CHECKLIST_STYLE, CHECKLIST_INPUT_STYLE, CHECKLIST_LABEL_STYLE, get_dynamic_checklist_label_style
 
 BARGAP = 0.30  # gap souhaité entre barres
 MAX_BARS_PANDAS = 2000  # si <=, on peut afficher toutes les modalités
@@ -157,15 +157,17 @@ def register_callbacks(app):
     @app.callback(
         Output("column-selection-checklist", "options"),
         Output("column-selection-checklist", "value"),
+        Output("column-selection-checklist", "labelStyle"),
         Input("original-parquet-path-store", "data"),
     )
     def fill_columns(parquet_path):
         df, is_spark = load_df(parquet_path)
         if df is None:
-            return [], []
+            return [], [], CHECKLIST_LABEL_STYLE
         cols = df.columns if is_spark else df.columns.tolist()
-        opts = [{"label": c, "value": c} for c in cols]
-        return opts, []  # valeur vide => pas de sélection auto
+        options = [{"label": c, "value": c} for c in cols]
+        label_style = get_dynamic_checklist_label_style(options)
+        return options, [], label_style  # valeur vide => pas de sélection auto
 
     # Graphs
     @app.callback(

@@ -18,3 +18,29 @@ CHECKLIST_LABEL_STYLE = {
     "width": "230px", "textOverflow": "ellipsis", "overflow": "hidden",
     "whiteSpace": "nowrap", "display": "inline-block", "marginRight": "12px",
 }
+
+
+def get_dynamic_checklist_label_style(options, min_width=25, max_width=55, extra_chars=3,):
+    """
+    Calcule une largeur adaptée aux labels d'une checklist.
+    La largeur est exprimée en ch.
+    """
+    labels = [
+        str(option.get("label", ""))
+        for option in (options or [])
+    ]
+
+    max_length = max(
+        (len(label) for label in labels),
+        default=min_width
+    )
+
+    dynamic_width = min(
+        max(max_length + extra_chars, min_width),
+        max_width
+    )
+
+    return {
+        **CHECKLIST_LABEL_STYLE,
+        "width": f"{dynamic_width}ch",
+    }

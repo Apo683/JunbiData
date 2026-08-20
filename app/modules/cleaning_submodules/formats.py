@@ -4,9 +4,9 @@ from dash import html, dcc, Input, Output, State, ALL, ctx
 from dash.exceptions import PreventUpdate
 import pandas as pd
 
-from app.modules.common.io import load_df, format_warning
+from app.modules.common.io import load_df, format_warning, get_column_dtype
 from app.modules.chargement import show_dataset_preview
-from app.modules.common.ui import STYLE_DROPDOWN, CHECKLIST_STYLE, CHECKLIST_INPUT_STYLE, CHECKLIST_LABEL_STYLE
+from app.modules.common.ui import STYLE_DROPDOWN, CHECKLIST_STYLE, CHECKLIST_INPUT_STYLE, CHECKLIST_LABEL_STYLE, get_dynamic_checklist_label_style
 
 try:
     from pyspark.sql import functions as F
@@ -432,31 +432,6 @@ def apply_formats_pandas(df, rules, is_spark=None):
 
     return pdf
 
-def get_column_dtype(df, column, is_spark=False):
-    if is_spark:
-        field = next(
-            (
-                field
-                for field in df.schema.fields
-                if field.name == column
-            ),
-            None
-        )
-
-        if field is None:
-            raise ValueError(
-                f"La colonne '{column}' n'existe pas dans le dataset."
-            )
-
-        return field.dataType
-
-    if column not in df.columns:
-        raise ValueError(
-            f"La colonne '{column}' n'existe pas dans le dataset."
-        )
-
-    return df[column].dtype
-
 # Retourne les stratégies compatibles avec le type actuel.
 def get_format_options(dtype, is_spark=False):
 
@@ -674,6 +649,7 @@ def register_callbacks(app):
     @app.callback(
     Output("fmt-columns", "options"),
     Output("fmt-columns", "value"),
+    Output("fmt-columns", "labelStyle"),
     Input("original-parquet-path-store", "data"),
     Input("pipeline-store", "data"),
     prevent_initial_call=False
@@ -682,7 +658,7 @@ def register_callbacks(app):
         df, is_spark = load_df(path)
 
         if df is None:
-            return [], []
+            return [], [], CHECKLIST_LABEL_STYLE
 
         columns = list(df.columns)
         existing_rules = get_format_rules_from_pipeline(pipeline)
@@ -699,7 +675,9 @@ def register_callbacks(app):
             if column in existing_rules
         ]
 
-        return options, selected_columns
+        label_style = get_dynamic_checklist_label_style(options)
+
+        return options, selected_columns, label_style
 
     @app.callback(
         Output("fmt-rules-container", "children"),
