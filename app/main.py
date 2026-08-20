@@ -10,6 +10,8 @@ from app.modules.chargement import register_callbacks_chargement as register_cha
 from app.modules.visualisation import register_callbacks_visualisation as register_visualisation, get_content as get_visualisation
 from app.modules.cleaning import register_callbacks_cleaning as register_cleaning, get_content as get_cleaning
 
+from app.modules.history import get_content as get_history, register_callbacks_history as register_history
+
 # 🔧 Définition des modules
 modules = {
     "chargement": "Chargement",
@@ -82,7 +84,7 @@ def build_layout():
             html.Div(id="module-nettoyage", children=get_cleaning(), style={"display": "none"}),
             # html.Div(id="module-nettoyage", children=html.Div("🧹 Module Nettoyage"), style={"display": "none"}),
             html.Div(id="module-preparation", children=html.Div("🛠️ Module Préparation"), style={"display": "none"}),
-            html.Div(id="module-historique", children=html.Div("📜 Module Historique"), style={"display": "none"}),
+            html.Div(id="module-historique", children=get_history(), style={"display": "none"}),
             html.Div(id="module-export", children=html.Div("📦 Module Export"), style={"display": "none"}),
         ], style={"minHeight": "300px", "paddingBottom": "40px"})
     ], fluid=True)
@@ -172,3 +174,6 @@ register_chargement(app)
 register_visualisation(app)
 # Module nettoyage des données
 register_cleaning(app)
+
+# Module historique
+register_history(app)
