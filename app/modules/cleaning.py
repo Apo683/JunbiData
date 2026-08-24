@@ -5,10 +5,13 @@ from dash import html, dcc, Input, Output, State
 from .common.io import load_df, format_warning
 from .cleaning_submodules import missing, duplicates_clean, outliers_clean, formats
 
-from app.modules.common.ui import STYLE_DROPDOWN, OPTIONS_DROPDOWN
+from app.modules.common.ui import STYLE_DROPDOWN
 
 
 def get_content():
+    # Sous-modules
+    from .cleaning_submodules.formats import get_layout as formats_layout
+
     return dbc.Tab(tab_id="nettoyage", label="Nettoyage", children=[
         html.Div([
             html.H5("🧹 Nettoyons le jeu de données :", style={"marginBottom": "15px"}),
@@ -25,7 +28,7 @@ def get_content():
 
 def register_callbacks_cleaning(app):
     # Sous-modules
-    from app.modules.cleaning_submodules.missing import get_layout as missing_layout, register_callbacks as register_missing
+    from app.modules.cleaning_submodules.missing_values import get_layout as missing_layout, register_callbacks as register_missing
     from app.modules.cleaning_submodules.duplicates_clean import get_layout as duplicates_clean_layout, register_callbacks as register_duplicates_clean
     from app.modules.cleaning_submodules.outliers_clean import get_layout as outliers_clean_layout, register_callbacks as register_outliers_clean
     from app.modules.cleaning_submodules.formats import get_layout as formats_layout, register_callbacks as register_formats
@@ -37,9 +40,9 @@ def register_callbacks_cleaning(app):
     )
     def render_subtab(active):
         if active == "clean-formats":
-            return formats_layout()
+            return formats_layout(STYLE_DROPDOWN)
         if active == "clean-missing":
-            return missing_layout()
+            return missing_layout(STYLE_DROPDOWN)
         if active == "clean-duplicates":
             return duplicates_clean_layout()
         if active == "clean-outliers":

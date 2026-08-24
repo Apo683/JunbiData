@@ -518,6 +518,9 @@ def get_format_rules_from_pipeline(pipeline):
             column = rule.get("column")
             action = rule.get("action")
 
+            if not column or not action:
+                continue
+
             if column and action:
                 # La dernière règle gagne
                 rules_by_column[column] = action
@@ -525,10 +528,7 @@ def get_format_rules_from_pipeline(pipeline):
     return rules_by_column
 
 def build_format_rule_row(column, current_dtype, selected_action=None, is_spark=False,):
-    options = get_format_options(
-        current_dtype,
-        is_spark=is_spark
-    )
+    options = get_format_options(current_dtype, is_spark=is_spark)
 
     return dbc.Row([
         dbc.Col(
@@ -742,7 +742,7 @@ def register_callbacks(app):
         return rows
     
     @app.callback(
-        Output("pipeline-store", "data"),
+        Output("pipeline-store", "data", allow_duplicate=True),
         Output("fmt-feedback", "children"),
         Input("fmt-apply", "n_clicks"),
         Input("fmt-reset", "n_clicks"),
@@ -829,18 +829,10 @@ def register_callbacks(app):
                 "params": rules
             }
 
-            updated_pipeline = add_step(
-                pipeline or [],
-                new_step
-            )
+            updated_pipeline = add_step(pipeline or [], new_step)
 
-            return updated_pipeline, dbc.Alert(
-                f"✅ {len(rules)} stratégie(s) de format enregistrée(s).",
-                color="success"
-            )
+            return updated_pipeline, dbc.Alert(f"✅ {len(rules)} stratégie(s) de format enregistrée(s).", color="success")
 
         except Exception as e:
-            return pipeline, format_warning(
-                f"Erreur lors de la configuration des formats : {str(e)}"
-            )
+            return pipeline, format_warning(f"Erreur lors de la configuration des formats : {str(e)}")
         

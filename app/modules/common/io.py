@@ -189,3 +189,28 @@ def prepare_adaptive_preview(
             return json_str
 
     return None
+
+def get_column_dtype(df, column, is_spark=False):
+    if is_spark:
+        field = next(
+            (
+                field
+                for field in df.schema.fields
+                if field.name == column
+            ),
+            None
+        )
+
+        if field is None:
+            raise ValueError(
+                f"La colonne '{column}' n'existe pas dans le dataset."
+            )
+
+        return field.dataType
+
+    if column not in df.columns:
+        raise ValueError(
+            f"La colonne '{column}' n'existe pas dans le dataset."
+        )
+
+    return df[column].dtype
