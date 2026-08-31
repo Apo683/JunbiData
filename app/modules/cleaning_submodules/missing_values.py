@@ -6,7 +6,6 @@ import pandas as pd
 from typing import Any, Dict, List, Tuple, Optional
 
 from app.modules.common.io import load_df, load_df_only, format_warning, get_column_dtype
-from app.modules.chargement import show_dataset_preview
 from app.modules.common.ui import STYLE_DROPDOWN, CHECKLIST_STYLE, CHECKLIST_INPUT_STYLE, CHECKLIST_LABEL_STYLE, get_dynamic_checklist_label_style
 
 try:
@@ -736,8 +735,6 @@ def build_missing_rule_row(column, dtype, selected_action=None, is_spark=False, 
                 },
                 type="text",
                 placeholder="Valeur constante",
-                # disabled=not bool(selected_action),
-                # style={"display": "none"},
             ),
             xs=12, md="auto", className="px-1 d-flex align-items-center",
         ),
@@ -762,7 +759,7 @@ def build_missing_rule_row(column, dtype, selected_action=None, is_spark=False, 
 # =========================================================
 
 def get_tab():
-    return dbc.Tab(tab_id=TAB_ID, label="Formats")
+    return dbc.Tab(tab_id=TAB_ID, label="Valeurs manquantes")
 
 def get_layout(STYLE_DROPDOWN):    
     return html.Div([
@@ -884,6 +881,7 @@ def register_callbacks(app):
                     f"(NA : "
                     f"{missing_analysis['columns'][column]['missing_count']})"
                 ),
+                
                 "value": column
             }
             for column in df.columns
@@ -1092,7 +1090,7 @@ def register_callbacks(app):
         State("pipeline-store", "data"),
         prevent_initial_call=True,
     )
-    def on_apply_missing_click(apply_clicks, reset_clicks, path, strategies, strategy_ids, constant_values, constant_ids, pipeline,):
+    def on_apply_missings_click(apply_clicks, reset_clicks, path, strategies, strategy_ids, constant_values, constant_ids, pipeline,):
         from app.modules.common.pipeline import add_step, reset_step
 
         pipeline = pipeline or []
