@@ -1,3 +1,4 @@
+# app/modules/chargement.py
 import dash
 from dash import html, dcc, Input, Output, State, dash_table
 import dash_bootstrap_components as dbc
@@ -652,6 +653,7 @@ def register_callbacks_chargement(app):
     @app.callback(
         [Output("original-parquet-path-store", "data", allow_duplicate=True),
          Output("filename-store", "data", allow_duplicate=True),
+         Output("pipeline-store", "data", allow_duplicate=True),
          Output("module-status", "data", allow_duplicate=True),
          Output("show-upload", "data", allow_duplicate=True),
          Output("error-store", "data", allow_duplicate=True),
@@ -694,6 +696,6 @@ def register_callbacks_chargement(app):
             cache_reset = {}
             
             print("----- Reset effectué - Retour à l'état initial -----")
-            return [None, None, status, True, error, None, cache_reset]
+            return [None, None, None, status, True, error, None, cache_reset]
         
         raise dash.exceptions.PreventUpdate
