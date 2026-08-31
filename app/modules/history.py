@@ -12,12 +12,27 @@ STEP_LABELS = {
 }
 
 ACTION_LABELS = {
+    # Formats
     "to_numeric": "Convertir en nombre",
     "to_string": "Convertir en texte",
     "to_datetime": "Convertir en date",
     "lowercase": "Convertir en minuscules",
     "uppercase": "Convertir en majuscules",
     "strip": "Supprimer les espaces inutiles",
+
+    # Valeurs manquantes
+    "drop_rows": "Supprimer les lignes",
+    "mean": "Remplacer par la moyenne",
+    "median": "Remplacer par la médiane",
+    "mode": "Remplacer par le mode",
+    "constant": "Remplacer par une constante",
+    "ffill": "Propagation vers l'avant",
+    "bfill": "Propagation vers l'arrière",
+
+    # Doublons
+    "first": "Garder la première occurrence",
+    "last": "Garder la dernière occurrence",
+    "none": "Supprimer tous les doublons",
 }
 
 
@@ -31,6 +46,71 @@ def format_value(value):
 
     return str(value)
 
+def build_parameter_lines(step_name, params):
+    parameter_lines = []
+
+    if not isinstance(params, list):
+        return [html.Li(format_value(params))]
+
+    for param in params:
+        action = param.get("action")
+
+        action_label = ACTION_LABELS.get(
+            action,
+            f"Action « {format_value(action)} »"
+        )
+
+        # Cas duplicates : plusieurs colonnes dans une clé
+        if step_name == "duplicates":
+            columns = param.get("columns") or []
+
+            if not isinstance(columns, list):
+                columns = [columns]
+
+            columns_label = " + ".join(
+                format_value(column)
+                for column in columns
+            )
+
+            parameter_lines.append(
+                html.Li([
+                    html.Strong("Clé de comparaison : "),
+                    format_value(columns_label),
+                    html.Br(),
+
+                    html.Strong("Stratégie : "),
+                    action_label,
+                ])
+            )
+
+        # Cas formats et missing_values : une seule colonne
+        else:
+            column = param.get("column")
+
+            parameter_lines.append(
+                html.Li([
+                    html.Strong("Colonne : "),
+                    format_value(column),
+                    html.Br(),
+
+                    html.Strong("Transformation : "),
+                    action_label,
+
+                    # Affichage facultatif de la constante
+                    html.Br() if "constant" in param else None,
+
+                    (
+                        html.Span([
+                            html.Strong("Valeur de remplacement : "),
+                            format_value(param.get("value"))
+                        ])
+                        if "constant" in param
+                        else None
+                    ),
+                ])
+            )
+
+    return parameter_lines
 
 def get_content(pipeline=None, cache=None):
     pipeline = pipeline or []
@@ -92,57 +172,26 @@ def get_content(pipeline=None, cache=None):
                 f"Étape « {step_name} »"
             )
 
-            parameter_lines = []
-
-            if isinstance(params, list):
-                for param in params:
-                    column = param.get("column")
-                    action = param.get("action")
-
-                    action_label = ACTION_LABELS.get(
-                        action,
-                        f"Action « {action} »"
-                    )
-
-                    parameter_lines.append(
-                        html.Li([
-                            html.Strong("Colonne : "),
-                            format_value(column),
-                            html.Br(),
-                            html.Strong("Transformation : "),
-                            action_label,
-                        ])
-                    )
-
-            elif isinstance(params, dict):
-                for key, value in params.items():
-                    parameter_lines.append(
-                        html.Li([
-                            html.Strong(f"{key} : "),
-                            format_value(value),
-                        ])
-                    )
-
-            else:
-                parameter_lines.append(
-                    html.Li(format_value(params))
-                )
+            parameter_lines = build_parameter_lines(
+                step_name=step_name,
+                params=params
+            )
 
             steps.append(
                 dbc.Card(
-                    dbc.CardBody(
-                        [
-                            html.H5(
-                                f"{index}. {readable_step}",
-                                className="card-title",
-                            ),
-                            html.P(
-                                "Transformation prévue à l'export.",
-                                className="text-muted",
-                            ),
-                            html.Ul(parameter_lines),
-                        ]
-                    ),
+                    dbc.CardBody([
+                        html.H5(
+                            f"{index}. {readable_step}",
+                            className="card-title",
+                        ),
+
+                        html.P(
+                            "Transformation prévue à l'export.",
+                            className="text-muted",
+                        ),
+
+                        html.Ul(parameter_lines),
+                    ]),
                     className="mb-3",
                 )
             )
