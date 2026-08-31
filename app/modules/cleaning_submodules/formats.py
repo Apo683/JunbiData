@@ -625,7 +625,7 @@ def register_callbacks(app):
         if not df_json:
             return html.Div("⚠️ Aucun aperçu disponible.")
 
-        return show_dataset_preview(df_json, n_rows=3)
+        return show_dataset_preview(df_json, n_rows=2)
     
     @app.callback(
         Output("fmt-reset", "style"),
