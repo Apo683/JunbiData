@@ -10,7 +10,6 @@ from app.modules.common.ui import STYLE_DROPDOWN
 
 def get_content():
     # Sous-modules
-    from .cleaning_submodules.formats import get_layout as formats_layout
 
     return dbc.Tab(tab_id="nettoyage", label="Nettoyage", children=[
         html.Div([
