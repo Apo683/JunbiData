@@ -8,7 +8,7 @@ STEP_LABELS = {
     "formats": "Conversion des colonnes",
     "missing": "Gestion des valeurs manquantes",
     "duplicates": "Suppression des doublons",
-    "outliers": "Gestion des valeurs extrêmes",
+    "outliers": "Gestion des valeurs aberrantes",
 }
 
 ACTION_LABELS = {
