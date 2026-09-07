@@ -21,10 +21,24 @@ def run_pipeline(df, pipeline):
     return df
 
 def add_step(pipeline, new_step):
-    # remplace si même type (ex: modifier stratégie missing)
-    pipeline = [s for s in pipeline if s["step"] != new_step["step"]]
-    pipeline.append(new_step)
-    return pipeline
+    pipeline = pipeline or []
+
+    step_name = new_step.get("step")
+
+    updated_pipeline = [
+        step
+        for step in pipeline
+        if step.get("step") != step_name
+    ]
+
+    print("Pipeline reçu par outliers :", pipeline)
+    print("Nouvelle étape :", new_step)
+
+    updated_pipeline.append(new_step)
+
+    print("Pipeline après add_step :", updated_pipeline)
+
+    return updated_pipeline
 
 def reset_step(pipeline, step_name):
     """
