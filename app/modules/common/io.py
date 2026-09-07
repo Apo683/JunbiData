@@ -214,3 +214,25 @@ def get_column_dtype(df, column, is_spark=False):
         )
 
     return df[column].dtype
+
+def sample_for_plot(df, column, is_spark=False, sample_n=5000):
+    if is_spark:
+        return (
+            df.select(column)
+            .dropna()
+            .limit(sample_n)
+            .toPandas()
+        )
+
+    if column not in df.columns:
+        raise ValueError(f"Colonne inconnue : {column}")
+
+    pdf = df[[column]].dropna()
+
+    if len(pdf) > sample_n:
+        pdf = pdf.sample(
+            n=sample_n,
+            random_state=42,
+        )
+
+    return pdf
