@@ -29,8 +29,8 @@ def get_content():
 def register_callbacks_cleaning(app):
     # Sous-modules
     from app.modules.cleaning_submodules.missing_values import get_layout as missing_layout, register_callbacks as register_missing
-    from app.modules.cleaning_submodules.duplicates import get_layout as duplicates_clean_layout, register_callbacks as register_duplicates_clean
-    from app.modules.cleaning_submodules.outliers import get_layout as outliers_clean_layout, register_callbacks as register_outliers_clean
+    from app.modules.cleaning_submodules.duplicates import get_layout as duplicates_clean_layout, register_callbacks as register_duplicates
+    from app.modules.cleaning_submodules.outliers import get_layout as outliers_clean_layout, register_callbacks as register_outliers
     from app.modules.cleaning_submodules.formats import get_layout as formats_layout, register_callbacks as register_formats
 
     # Route le contenu selon le sous-onglet actif
@@ -53,5 +53,5 @@ def register_callbacks_cleaning(app):
     # Callbacks spécifiques de chaque sous-module
     register_formats(app)
     register_missing(app)
-    register_duplicates_clean(app)
-    register_outliers_clean(app)
+    register_duplicates(app)
+    register_outliers(app)
