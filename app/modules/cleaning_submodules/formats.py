@@ -507,7 +507,7 @@ def get_format_options(dtype, is_spark=False):
 def get_format_rules_from_pipeline(pipeline):
     if not pipeline:
         return {}
-    print(f"--------- Pipeline : {pipeline} ---------")
+    print(f"--------- Pipeline Formats : {pipeline} ---------")
     rules_by_column = {}
 
     for step in pipeline:
@@ -529,6 +529,9 @@ def get_format_rules_from_pipeline(pipeline):
 
 def build_format_rule_row(column, current_dtype, selected_action=None, is_spark=False,):
     options = get_format_options(current_dtype, is_spark=is_spark)
+    badge_style={
+        "fontSize": "15px",
+    }
 
     return dbc.Row([
         dbc.Col(
@@ -537,11 +540,12 @@ def build_format_rule_row(column, current_dtype, selected_action=None, is_spark=
             md=2
         ),
         dbc.Col(
-            html.Span(
-                f"Type actuel : {current_dtype}"
-            ),
-            xs=12,
-            md=2
+            dbc.Badge(
+                f"Type actuel : {current_dtype}",
+                color="secondary",
+                className="me-1",
+                style=badge_style,
+            )
         ),
         dbc.Col(
             dcc.Dropdown(
@@ -552,7 +556,7 @@ def build_format_rule_row(column, current_dtype, selected_action=None, is_spark=
                 options=options,
                 value=selected_action,
                 clearable=True,
-                placeholder="Choisir une stratégie",
+                placeholder="Choisir une conversion",
                 style=STYLE_DROPDOWN,
             ),
             xs=12,
@@ -570,7 +574,7 @@ def get_tab():
 def get_layout(STYLE_DROPDOWN):    
     return html.Div([
         html.P(
-            "Conversion du type des colonnes (choisir la conversion puis appliquer) :",
+            "Conversion du type des colonnes (choisir la conversion puis appliquer globalement) :",
             style={"fontSize": "18px", "marginBottom": "10px"},
         ),
         dbc.Row([
