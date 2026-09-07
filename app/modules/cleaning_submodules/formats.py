@@ -571,7 +571,7 @@ def build_format_rule_row(column, current_dtype, selected_action=None, is_spark=
 def get_tab():
     return dbc.Tab(tab_id=TAB_ID, label="Formats")
 
-def get_layout(STYLE_DROPDOWN):    
+def get_layout():    
     return html.Div([
         html.P(
             "Conversion du type des colonnes (choisir la conversion puis appliquer globalement) :",

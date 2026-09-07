@@ -28,8 +28,8 @@ def get_content():
 def register_callbacks_cleaning(app):
     # Sous-modules
     from app.modules.cleaning_submodules.missing_values import get_layout as missing_layout, register_callbacks as register_missing
-    from app.modules.cleaning_submodules.duplicates import get_layout as duplicates_clean_layout, register_callbacks as register_duplicates
-    from app.modules.cleaning_submodules.outliers import get_layout as outliers_clean_layout, register_callbacks as register_outliers
+    from app.modules.cleaning_submodules.duplicates import get_layout as duplicates_layout, register_callbacks as register_duplicates
+    from app.modules.cleaning_submodules.outliers import get_layout as outliers_layout, register_callbacks as register_outliers
     from app.modules.cleaning_submodules.formats import get_layout as formats_layout, register_callbacks as register_formats
 
     # Route le contenu selon le sous-onglet actif
@@ -39,13 +39,13 @@ def register_callbacks_cleaning(app):
     )
     def render_subtab(active):
         if active == "clean-formats":
-            return formats_layout(STYLE_DROPDOWN)
+            return formats_layout()
         if active == "clean-missing":
-            return missing_layout(STYLE_DROPDOWN)
+            return missing_layout()
         if active == "clean-duplicates":
-            return duplicates_clean_layout()
+            return duplicates_layout()
         if active == "clean-outliers":
-            return outliers_clean_layout()
+            return outliers_layout()
         
         return format_warning("Sous-onglet inconnu.")
 

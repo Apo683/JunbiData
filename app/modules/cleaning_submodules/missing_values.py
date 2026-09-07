@@ -761,7 +761,7 @@ def build_missing_rule_row(column, dtype, selected_action=None, is_spark=False, 
 def get_tab():
     return dbc.Tab(tab_id=TAB_ID, label="Valeurs manquantes")
 
-def get_layout(STYLE_DROPDOWN):    
+def get_layout():    
     return html.Div([
         html.P(
             "Remplacement des valeurs manquantes (choix de la méthode de traitement, visualiser l'impact puis appliquer globalement) :",
