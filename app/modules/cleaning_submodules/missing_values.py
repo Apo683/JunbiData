@@ -590,7 +590,7 @@ def get_missing_options(dtype, is_spark=False):
 def get_missing_rules_from_pipeline(pipeline):
     if not pipeline:
         return {}
-
+    print(f"--------- Pipeline Missing values : {pipeline} ---------")
     rules_by_column = {}
 
     for step in pipeline:
@@ -764,7 +764,7 @@ def get_tab():
 def get_layout(STYLE_DROPDOWN):    
     return html.Div([
         html.P(
-            "Remplacement des valeurs manquantes (choix de la méthode, visualiser l'impact puis appliquer globalement) :",
+            "Remplacement des valeurs manquantes (choix de la méthode de traitement, visualiser l'impact puis appliquer globalement) :",
             style={"fontSize": "18px", "marginBottom": "10px"},
         ),
         dcc.Store(id="missing-analysis-store", data={}),

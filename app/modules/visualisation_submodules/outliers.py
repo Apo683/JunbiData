@@ -212,7 +212,7 @@ def _sample_for_plot(df, col_name, is_spark, sample_n=5000):
 def get_layout(STYLE_DROPDOWN, OPTIONS_DROPDOWN):
     return dbc.Tab(
         tab_id="outliers",
-        label="Outliers",
+        label="Valeurs aberrantes",
         children=[
             html.H6("Vue globale des outliers par colonne :"),
             dbc.Row([

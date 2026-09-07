@@ -138,7 +138,7 @@ def get_duplicate_rules_from_pipeline(pipeline):
 
     return rules
 
-def build_duplicate_rule_row(key_id, columns, selected_columns=None, selected_action=None,):
+def build_duplicate_rule_row(key_id, columns, selected_columns=None, selected_action=None):
     selected_columns = selected_columns or []
 
     options = [
@@ -184,7 +184,7 @@ def build_duplicate_rule_row(key_id, columns, selected_columns=None, selected_ac
         ),
 
         html.P(
-            "Stratégie à appliquer :",
+            "Méthode à appliquer :",
             className="mb-1"
         ),
 
@@ -196,7 +196,7 @@ def build_duplicate_rule_row(key_id, columns, selected_columns=None, selected_ac
             options=DUPLICATE_OPTIONS,
             value=selected_action,
             clearable=True,
-            placeholder="Choisir une stratégie",
+            placeholder="Choisir une méthode",
             style={**STYLE_DROPDOWN, "marginBottom": "5px"}
         ),
 
@@ -238,34 +238,7 @@ def get_existing_key_ids(children):
 
     return key_ids
 
-# def show_duplicate_preview(df_json, n_rows=50):
-#     preview = show_dataset_preview(df_json, n_rows=n_rows)
-
-#     if not isinstance(preview, html.Div):
-#         return preview
-
-#     children = preview.children
-
-#     if not isinstance(children, list):
-#         return preview
-
-#     children_without_title = [
-#         child
-#         for child in children
-#         if not (
-#             isinstance(child, html.H6)
-#             and child.children == "🔎 Aperçu du dataset :"
-#         )
-#     ]
-
-#     return html.Div(children_without_title)
-
-def show_duplicate_preview(
-    preview_json,
-    duplicate_counts=None,
-    page_size=10,
-    max_rows=100
-):
+def show_duplicate_preview(preview_json, duplicate_counts=None, page_size=10, max_rows=100):
     """
     Affiche un aperçu paginé et limité des doublons.
     """
@@ -306,7 +279,6 @@ def show_duplicate_preview(
             html.H6(
                 f"🔎 {total_groups} groupe(s) de doublons détecté(s). "
                 f"Aperçu limité à {len(preview_df)} ligne(s).",
-                # className="text-muted"
             ),
 
             dash_table.DataTable(
@@ -317,14 +289,11 @@ def show_duplicate_preview(
                 page_current=0,
                 style_table={
                     "overflowX": "auto",
-                    # "maxHeight": "500px",
                     "overflowY": "auto",
                 },
                 style_cell={
                     "textAlign": "left",
                     "fontSize": "13px",
-                    # "maxWidth": "250px",
-                    # "whiteSpace": "normal",
                     "backgroundColor": "#f2f2f2", 
                     "color": "#111",
                     "overflow": "hidden",
@@ -417,7 +386,7 @@ def get_tab():
 def get_layout():
     return html.Div([
         html.P(
-            "Nettoyage des doublons (choisir la méthode puis appliquer) :",
+            "Nettoyage des doublons (choix des colonnes pour définir la clé de duplication, choisir la méthode de traitement puis appliquer globalement) :",
             style={"fontSize": "18px", "marginBottom": "10px"},
         ),
         dbc.Row([
@@ -457,15 +426,15 @@ def register_callbacks(app):
         Input("pipeline-store", "data"),
         Input("cleaning-subtabs", "active_tab")
     )
-    def update_formats_reset_button(pipeline, active_tab):
-        has_formats = any(
+    def update_duplicates_reset_button(pipeline, active_tab):
+        has_duplicates = any(
             step.get("step") == "duplicates"
             for step in (pipeline or [])
         )
 
         return {
             "display": "inline-block"
-            if active_tab == TAB_ID and has_formats
+            if active_tab == TAB_ID and has_duplicates
             else "none",
             "marginTop": "6px",
             "marginBottom": "6px",
@@ -519,11 +488,6 @@ def register_callbacks(app):
                     f"🔢 Groupes de doublons : {groups_text}",
                     className="mb-2"
                 ),
-
-                # html.H6(
-                #     "🔎 Aperçu des groupes de doublons :",
-                #     className="mb-2"
-                # ),
 
                 show_duplicate_preview(
                     preview_json,
@@ -666,21 +630,15 @@ def register_callbacks(app):
         State("pipeline-store", "data"),
         prevent_initial_call=True,
     )
-    def on_apply_duplicates_click(
-        apply_clicks,
-        reset_clicks,
-        columns_values,
-        columns_ids,
-        strategies,
-        path,
-        pipeline,
-    ):
+    def on_apply_duplicates_click(apply_clicks, reset_clicks, columns_values, columns_ids, strategies, path, pipeline):
         from app.modules.common.pipeline import add_step, reset_step
 
-        triggered_id = ctx.triggered_id
         pipeline = pipeline or []
 
-        if triggered_id == "dup-reset":
+        if ctx.triggered_id == "dup-reset":
+            if not reset_clicks:
+                raise PreventUpdate
+
             updated_pipeline = reset_step(
                 pipeline,
                 "duplicates"
@@ -694,7 +652,7 @@ def register_callbacks(app):
                 )
             )
 
-        if triggered_id != "dup-apply":
+        if ctx.triggered_id != "dup-apply":
             raise PreventUpdate
 
         df, is_spark = load_df(path)
