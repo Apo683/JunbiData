@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Tuple, Optional
 
 from app.modules.common.io import load_df, load_df_only, format_warning, get_column_dtype
 from app.modules.common.ui import STYLE_DROPDOWN, CHECKLIST_STYLE, CHECKLIST_INPUT_STYLE, CHECKLIST_LABEL_STYLE, get_dynamic_checklist_label_style
+from app.modules.common.pipeline import get_pipeline
 
 try:
     from pyspark.sql import functions as F
@@ -592,8 +593,9 @@ def get_missing_rules_from_pipeline(pipeline):
         return {}
     print(f"--------- Pipeline Missing values : {pipeline} ---------")
     rules_by_column = {}
-
-    for step in pipeline:
+    pipeline_steps = get_pipeline(pipeline)
+    
+    for step in pipeline_steps:
         if step.get("step") != "missing_values":
             continue
 
@@ -843,9 +845,11 @@ def register_callbacks(app):
         Input("pipeline-store", "data")
     )
     def update_missing_reset_button(pipeline):
+        pipeline_steps = get_pipeline(pipeline)
+
         has_missing = any(
             step.get("step") == "missing_values"
-            for step in (pipeline or [])
+            for step in pipeline_steps
         )
 
         return {

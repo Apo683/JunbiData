@@ -1,50 +1,97 @@
 # modules/common/pipeline.py
 
-def run_pipeline(df, pipeline):
+def get_pipeline(config):
+    """
+    Retourne toujours la liste des étapes du pipeline.
+    Compatible avec l'ancien format et le nouveau.
+    """
+    if not config:
+        return []
+
+    # Nouveau format :
+    # {"pipeline": [...], "metadata": {...}}
+    if isinstance(config, dict):
+        return config.get("pipeline", [])
+
+    # Ancien format : [...]
+    if isinstance(config, list):
+        return config
+
+    return []
+
+def run_pipeline(config_df, config):
+    pipeline = get_pipeline(config)
+
     for step in pipeline:
-        if step["step"] == "formats":
+        step_name = step.get("step")
+        params = step.get("params", [])
+
+        if step_name == "formats":
             from app.modules.cleaning_submodules.formats import apply_formats
-            df = apply_formats(df, step["params"])
+            config_df = apply_formats(config_df, params)
 
-        elif step["step"] == "missing":
+        elif step_name == "missing":
             from app.modules.cleaning_submodules.missing import apply_missing
-            df = apply_missing(df, step["params"])
+            config_df = apply_missing(config_df, params)
 
-        elif step["step"] == "duplicates":
-            from app.modules.cleaning_submodules.duplicates_clean import apply_duplicates
-            df = apply_duplicates(df, step["params"])
+        elif step_name == "duplicates":
+            from app.modules.cleaning_submodules.duplicates import apply_duplicates
+            config_df = apply_duplicates(config_df, params)
 
-        elif step["step"] == "outliers":
-            from app.modules.cleaning_submodules.outliers_clean import apply_outliers
-            df = apply_outliers(df, step["params"])
+        elif step_name == "outliers":
+            from app.modules.cleaning_submodules.outliers import apply_outliers
+            config_df = apply_outliers(config_df, params)
 
-    return df
+    return config_df
 
-def add_step(pipeline, new_step):
-    pipeline = pipeline or []
+def create_pipeline_config():
+    return {
+        "version": 1,
+        "pipeline": [],
+        "metadata": {
+            "columns": {}
+        }
+    }
 
+
+def add_step(config, new_step):
+    config = config or create_pipeline_config()
+
+    pipeline = get_pipeline(config)
     step_name = new_step.get("step")
 
     updated_pipeline = [
-        step
-        for step in pipeline
+        step for step in pipeline
         if step.get("step") != step_name
     ]
 
-    print("Pipeline reçu par outliers :", pipeline)
-    print("Nouvelle étape :", new_step)
-
     updated_pipeline.append(new_step)
 
-    print("Pipeline après add_step :", updated_pipeline)
+    config["pipeline"] = updated_pipeline
 
-    return updated_pipeline
+    return config
 
-def reset_step(pipeline, step_name):
-    """
-    Supprime une étape précise du pipeline sans modifier le DataFrame original.
-    """
-    return [
-        step for step in (pipeline or [])
-        if step["step"] != step_name
+def reset_step(config, step_name):
+    config = config or create_pipeline_config()
+
+    pipeline = get_pipeline(config)
+
+    config["pipeline"] = [
+        step for step in pipeline
+        if step.get("step") != step_name
     ]
+
+    return config
+
+
+def add_metadata(config, column, values):
+    config = config or create_pipeline_config()
+
+    columns = config.setdefault("metadata", {}).setdefault("columns", {})
+
+    columns[column] = {
+        **columns.get(column, {}),
+        **values
+    }
+
+    return config

@@ -2,7 +2,7 @@
 
 from dash import html, Input, Output, callback
 import dash_bootstrap_components as dbc
-
+from app.modules.common.pipeline import get_pipeline
 
 STEP_LABELS = {
     "formats": "Conversion des colonnes",
@@ -113,7 +113,7 @@ def build_parameter_lines(step_name, params):
     return parameter_lines
 
 def get_content(pipeline=None, cache=None):
-    pipeline = pipeline or []
+    pipeline = get_pipeline(pipeline)
     cache = cache or {}
 
     loading_info = cache.get("chargement", {})

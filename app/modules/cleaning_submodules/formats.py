@@ -7,6 +7,7 @@ import pandas as pd
 from app.modules.common.io import load_df, format_warning, get_column_dtype
 from app.modules.chargement import show_dataset_preview
 from app.modules.common.ui import STYLE_DROPDOWN, CHECKLIST_STYLE, CHECKLIST_INPUT_STYLE, CHECKLIST_LABEL_STYLE, get_dynamic_checklist_label_style
+from app.modules.common.pipeline import get_pipeline
 
 try:
     from pyspark.sql import functions as F
@@ -509,8 +510,9 @@ def get_format_rules_from_pipeline(pipeline):
         return {}
     print(f"--------- Pipeline Formats : {pipeline} ---------")
     rules_by_column = {}
-
-    for step in pipeline:
+    pipeline_steps = get_pipeline(pipeline)
+    
+    for step in pipeline_steps:
         if step.get("step") != "formats":
             continue
 
@@ -637,9 +639,11 @@ def register_callbacks(app):
         Input("cleaning-subtabs", "active_tab")
     )
     def update_formats_reset_button(pipeline, active_tab):
+        pipeline_steps = get_pipeline(pipeline)
+
         has_formats = any(
             step.get("step") == "formats"
-            for step in (pipeline or [])
+            for step in pipeline_steps
         )
 
         return {
